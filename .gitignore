@@ -1,0 +1,15 @@
+node_modules
+dist
+dev-dist
+coverage
+*.local
+.DS_Store
+.vite
+*.log
+
+# Freebuff/agent session metadata, not part of the project
+.freebuff/
+
+# Local environment files (the app itself never reads them)
+.env
+.env.*

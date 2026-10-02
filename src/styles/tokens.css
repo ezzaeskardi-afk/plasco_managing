@@ -1,0 +1,34 @@
+/* Design tokens - AGENTS.md section 8. Values only; semantic mapping lives in index.css. */
+:root {
+  --frost: #f1f5f6;
+  --paper: #ffffff;
+  --line: #dce4e7;
+  --ink: #12202a;
+  --crate: #51626e;
+  --basin: #0b7285;
+  --basin-ink: #ffffff;
+  --ok: #1f7a4d;
+  --low: #b45309;
+  --out: #c0262d;
+  --radius-input: 10px;
+  --radius-sheet: 20px;
+  --radius-thumb: 12px;
+  --text-scale: 1;
+}
+
+.dark {
+  --frost: #0e161b;
+  --paper: #151f26;
+  --line: #26343d;
+  --ink: #e7eef1;
+  --crate: #9db0bb;
+  --basin: #4db6c8;
+  --basin-ink: #06222a;
+  --ok: #4cc38a;
+  --low: #f0a04b;
+  --out: #f2777c;
+}
+
+html {
+  font-size: calc(17px * var(--text-scale));
+}

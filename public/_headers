@@ -1,0 +1,17 @@
+# Netlify / Cloudflare Pages — سرور این فایل را خودش می‌خواند.
+# برای Apache / هاست اشتراکی، فایل .htaccess همان پوشه کار را می‌کند.
+
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+
+/workbox-*.js
+  Cache-Control: no-cache
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

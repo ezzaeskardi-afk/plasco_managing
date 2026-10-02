@@ -1,0 +1,132 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Map design tokens to Tailwind/shadcn variable names (AGENTS.md section 8). */
+@theme inline {
+  --color-frost: var(--frost);
+  --color-paper: var(--paper);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-crate: var(--crate);
+  --color-basin: var(--basin);
+  --color-basin-ink: var(--basin-ink);
+  --color-ok: var(--ok);
+  --color-low: var(--low);
+  --color-out: var(--out);
+
+  /* shadcn aliases */
+  --color-background: var(--frost);
+  --color-foreground: var(--ink);
+  --color-card: var(--paper);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--paper);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--basin);
+  --color-primary-foreground: var(--basin-ink);
+  --color-secondary: var(--paper);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--frost);
+  --color-muted-foreground: var(--crate);
+  --color-accent: var(--frost);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--out);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--basin);
+
+  --radius-input: 10px;
+  --radius-sheet: 20px;
+  --radius-thumb: 12px;
+
+  --font-sans: 'Vazirmatn Variable', 'Vazirmatn', system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--frost);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    line-height: 1.7;
+    overscroll-behavior-y: none;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--basin);
+    outline-offset: 2px;
+  }
+
+  /* iOS: keep the app inside the safe area and use the dynamic viewport. */
+  #root {
+    min-height: 100dvh;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+  }
+
+  input,
+  textarea {
+    font-size: max(1rem, 16px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@utility safe-b {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility safe-t {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sonner draws a 20 px close circle; widen the hit area to a thumb (AGENTS.md 8). */
+[data-sonner-toast] [data-close-button]::after {
+  content: '';
+  position: absolute;
+  inset: -14px;
+}
+
+/* ...and its action chip is 24 px tall, too small for a phone. Two attributes
+   to outrank sonner's own `[data-sonner-toast][data-styled] [data-button]`. */
+[data-sonner-toast][data-styled='true'] [data-button] {
+  min-height: 2.75rem;
+  padding-inline: 1rem;
+  font-size: 0.95rem;
+}

@@ -1,0 +1,9 @@
+# Keep one line ending everywhere (the project is plain JS/TS/CSS/markdown).
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff2 binary
+*.xlsx binary

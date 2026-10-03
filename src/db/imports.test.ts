@@ -121,16 +121,112 @@ describe('undoImportBatch', () => {
     await applyMovement({ productId: product.id, locationId, type: 'sale', qty: -4 }, db);
 
     const preview = await previewImportUndo(batchId, db);
-    expect(preview.blockers).toHaveLength(1);
-    expect(preview.blockers[0]?.productName).toBe('سطل');
+    // The opening movement needs 10 pieces and only 6 are left; the product row
+    // is stuck with it. Nothing at all can be reverted, so the undo refuses.
+    expect(preview.undoableRows).toBe(0);
+    expect(preview.blockedRows.map((row) => [row.name, row.reason])).toEqual([
+      ['سطل', 'stock-used'],
+      ['سطل', 'holds-stock'],
+    ]);
+    expect(preview.blockedRows[0]?.qty).toBe(4);
+    expect(preview.blockedRows[0]?.locationName).toBeTruthy();
 
     await expect(undoImportBatch(batchId, db)).rejects.toBeInstanceOf(ImportUndoBlockedError);
 
-    // All-or-nothing: the sale stays and the batch is still undoable in theory.
+    // Nothing was touched: the sale stays and the batch is still undoable in theory.
     expect((await db.stockLevels.get([product.id, locationId]))?.qty).toBe(6);
-    expect((await db.imports.get(batchId))?.undoneAt).toBeUndefined();
+    const stored = await db.imports.get(batchId);
+    expect(stored?.undoneAt).toBeUndefined();
+    expect(stored?.partialUndoAt).toBeUndefined();
     // The created product plus its opening movement both stay in the journal.
     expect(await db.importEntries.count()).toBe(2);
+  });
+
+  it('reverts the rows it can and leaves the used ones for later', async () => {
+    const locationId = await firstLocationId();
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [
+        { نام: 'سطل', تعداد: '۱۰' },
+        { نام: 'سبد', تعداد: '۵' },
+      ],
+      { name: 'نام', quantity: 'تعداد' },
+      { ...context, defaultLocationId: locationId },
+    );
+    const commit = await commitRows(prepared, {}, db);
+    const batchId = requireBatchId(commit);
+
+    const products = await db.products.toArray();
+    const bucket = products.find((product) => product.name === 'سطل');
+    const basket = products.find((product) => product.name === 'سبد');
+    if (!bucket || !basket) throw new Error('expected both imported products');
+    // Four of the ten buckets were sold after the import.
+    await applyMovement({ productId: bucket.id, locationId, type: 'sale', qty: -4 }, db);
+
+    const preview = await previewImportUndo(batchId, db);
+    // The basket's movement and its product row revert; the bucket's two stay.
+    expect(preview.undoableRows).toBe(2);
+    expect(preview.blockedRows.map((row) => [row.name, row.reason])).toEqual([
+      ['سطل', 'stock-used'],
+      ['سطل', 'holds-stock'],
+    ]);
+    expect(preview.blockedRows[0]?.qty).toBe(4);
+
+    const outcome = await undoImportBatch(batchId, db);
+    expect(outcome.partial).toBe(true);
+    expect(outcome.movementsUndone).toBe(1);
+    expect(outcome.productsDeleted).toBe(1);
+    expect(outcome.rowsLeft).toBe(2);
+
+    expect((await db.stockLevels.get([basket.id, locationId]))?.qty).toBe(0);
+    expect((await db.products.get(basket.id))?.deletedAt).toBeTruthy();
+    expect((await db.stockLevels.get([bucket.id, locationId]))?.qty).toBe(6);
+    expect((await db.products.get(bucket.id))?.deletedAt).toBeUndefined();
+
+    const stored = await db.imports.get(batchId);
+    expect(stored?.undoneAt).toBeUndefined();
+    expect(stored?.partialUndoAt).toBeTruthy();
+    expect(stored?.partialRows).toBe(2);
+    expect(await db.importEntries.count()).toBe(2);
+
+    // Four more buckets arrive: the rows that stayed behind can now go too.
+    await applyMovement({ productId: bucket.id, locationId, type: 'receive', qty: 4 }, db);
+    const finished = await undoImportBatch(batchId, db);
+    expect(finished.partial).toBe(false);
+    expect(finished.movementsUndone).toBe(1);
+    expect(finished.productsDeleted).toBe(1);
+    expect((await db.stockLevels.get([bucket.id, locationId]))?.qty).toBe(0);
+    expect((await db.products.get(bucket.id))?.deletedAt).toBeTruthy();
+    expect((await db.imports.get(batchId))?.undoneAt).toBeTruthy();
+    expect(await db.importEntries.count()).toBe(0);
+  });
+
+  it('keeps a created product whose sold-out opening movement still waits', async () => {
+    const locationId = await firstLocationId();
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [{ نام: 'سطل', تعداد: '۱۰' }],
+      { name: 'نام', quantity: 'تعداد' },
+      { ...context, defaultLocationId: locationId },
+    );
+    const commit = await commitRows(prepared, {}, db);
+    const batchId = requireBatchId(commit);
+
+    const product = (await db.products.toArray())[0];
+    if (!product) throw new Error('expected the imported product');
+    // Everything was sold again: the shelf is back at zero, but the opening
+    // movement still waits, so deleting the product would hide that row.
+    await applyMovement({ productId: product.id, locationId, type: 'sale', qty: -10 }, db);
+
+    const preview = await previewImportUndo(batchId, db);
+    expect(preview.undoableRows).toBe(0);
+    expect(preview.blockedRows.map((row) => [row.name, row.reason, row.qty])).toEqual([
+      ['سطل', 'stock-used', 10],
+      ['سطل', 'holds-stock', 0],
+    ]);
+
+    await expect(undoImportBatch(batchId, db)).rejects.toBeInstanceOf(ImportUndoBlockedError);
+    expect((await db.products.get(product.id))?.deletedAt).toBeUndefined();
   });
 
   it('cannot be undone twice', async () => {

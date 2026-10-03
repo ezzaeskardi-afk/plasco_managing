@@ -134,6 +134,9 @@ export interface ImportBatch extends Base {
   updated: number;
   movements: number;
   undoneAt?: number;
+  /** Set when only part of the batch could be reverted; `partialRows` then wait. */
+  partialUndoAt?: number;
+  partialRows?: number;
 }
 
 /** Field values an import wrote over an existing product (restored on undo). */

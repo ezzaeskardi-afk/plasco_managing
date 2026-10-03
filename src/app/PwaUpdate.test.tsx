@@ -35,12 +35,14 @@ describe('PwaUpdate', () => {
     expect(options?.onNeedRefresh).toBeTypeOf('function');
     options.onNeedRefresh?.();
 
+    // A Persian cancel button, not sonner's built-in close button: that one
+    // announces itself in English whatever its options say.
     expect(vi.mocked(toast)).toHaveBeenCalledWith(
       fa.settings.updateAvailable,
       expect.objectContaining({
         id: 'pwa-update',
-        closeButton: true,
         duration: Infinity,
+        cancel: expect.objectContaining({ label: fa.actions.close }),
       }),
     );
   });

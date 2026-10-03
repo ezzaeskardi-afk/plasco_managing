@@ -1,13 +1,14 @@
 import { db as defaultDb, type PlascoDb } from './dexie';
 import { undoMovement } from './movements';
 import { softDelete, softDeleteProduct, updateProduct } from './repos';
-import type { ID, ImportBatch, ImportEntry } from './types';
+import type { ID, ImportBatch, ImportedProductFields, ImportEntry } from './types';
 
 /**
  * Every commit writes a journal (`imports` + `importEntries`) in the same
  * transaction as the data it touched, so a wrong file can be reverted as one
- * batch. Same reasoning as the stock-take apply in `stocktake.ts`: a partial
- * undo would leave the shelf in a state nobody can reproduce by hand.
+ * batch. The undo reverts every row it safely can and names the ones it cannot:
+ * a row whose stock was already sold stays behind, and the batch stays undoable
+ * so a later delivery (or stock correction) can still clear it.
  */
 
 /** How many recent imports stay undoable; older batches are pruned away. */
@@ -35,18 +36,31 @@ export class ImportNothingToUndoError extends Error {
   }
 }
 
-/** A shelf the undo would push below zero, because the stock was used since. */
-export interface ImportUndoBlocker {
-  productId: ID;
-  productName?: string;
-  locationId: ID;
-  /** Level that would remain after the undo. */
-  level: number;
+/** Why one journal row has to stay behind. */
+export type ImportUndoBlockReason = 'stock-used' | 'holds-stock' | 'in-use';
+
+/** One row of the import that cannot be reverted right now. */
+export interface ImportUndoBlockedRow {
+  entryId: ID;
+  kind: ImportEntry['kind'];
+  /** Product the row belongs to; a brand row keeps the brand id here. */
+  targetId: ID;
+  /** Product (or brand) name, for the message the shopkeeper reads. */
+  name?: string;
+  /** Shelf of the movement that does not fit (movement rows only). */
+  locationId?: ID;
+  locationName?: string;
+  reason: ImportUndoBlockReason;
+  /**
+   * `stock-used`: pieces the shelf is short of; `holds-stock`: pieces still on
+   * the shelves; `in-use`: 0.
+   */
+  qty: number;
 }
 
 export class ImportUndoBlockedError extends Error {
-  constructor(readonly blockers: ImportUndoBlocker[]) {
-    super(`ImportUndoBlocked:${blockers.length}`);
+  constructor(readonly rows: ImportUndoBlockedRow[]) {
+    super(`ImportUndoBlocked:${rows.length}`);
     this.name = 'ImportUndoBlockedError';
   }
 }
@@ -94,70 +108,201 @@ export async function listImportBatches(limit = 5, target: PlascoDb = defaultDb)
 export interface ImportUndoPreview {
   batch: ImportBatch;
   entries: number;
+  /** Rows the undo would revert right now. */
   created: number;
   updated: number;
   movements: number;
   brands: number;
-  blockers: ImportUndoBlocker[];
+  undoableRows: number;
+  /** Rows that would stay behind, named so the user knows which ones. */
+  blockedRows: ImportUndoBlockedRow[];
 }
 
 interface PendingMovement {
+  entryId: ID;
   movementId: ID;
   productId: ID;
   locationId: ID;
+  /** Signed pieces of the imported movement; the compensation writes `-qty`. */
   qty: number;
 }
 
-/** Movements of this batch that still can be undone, plus the shelves that would go negative. */
-async function inspectMovements(
-  entries: readonly ImportEntry[],
-  target: PlascoDb,
-): Promise<{ pending: PendingMovement[]; blockers: ImportUndoBlocker[] }> {
-  const pending: PendingMovement[] = [];
+interface PlannedRestore {
+  entryId: ID;
+  productId: ID;
+  before: ImportedProductFields;
+}
+
+interface PlannedDelete {
+  entryId: ID;
+  productId: ID;
+}
+
+interface PlannedBrandDelete {
+  entryId: ID;
+  brandId: ID;
+}
+
+interface UndoPlan {
+  pending: PendingMovement[];
+  restores: PlannedRestore[];
+  productDeletes: PlannedDelete[];
+  brandDeletes: PlannedBrandDelete[];
+  /** Journal rows with nothing left to revert (already compensated or gone). */
+  resolved: ID[];
+  blocked: ImportUndoBlockedRow[];
+}
+
+function shelfKey(productId: ID, locationId: ID): string {
+  return `${productId}\u0000${locationId}`;
+}
+
+/** Pieces left on a product's shelves once the planned compensations are written. */
+async function remainingQty(productId: ID, plannedDelta: number, target: PlascoDb): Promise<number> {
+  const levels = await target.stockLevels.where('productId').equals(productId).toArray();
+  return levels.reduce((sum, level) => sum + level.qty, 0) - plannedDelta;
+}
+
+/**
+ * Read-only plan: which journal rows revert now, which stay behind and why.
+ * Movement rows are matched against the live shelf levels, so two rows on the
+ * same shelf are judged together.
+ */
+async function planImportUndo(entries: readonly ImportEntry[], target: PlascoDb): Promise<UndoPlan> {
+  const plan: UndoPlan = {
+    pending: [],
+    restores: [],
+    productDeletes: [],
+    brandDeletes: [],
+    resolved: [],
+    blocked: [],
+  };
+  const locationNames = new Map((await target.locations.toArray()).map((row) => [row.id, row.name]));
+
   const movementEntries = entries.filter((entry) => entry.kind === 'movement');
+  const compensated = new Set<ID>();
   if (movementEntries.length > 0) {
     // One pass over the movement log instead of one scan per row (`undoOf` has no
     // index): a 500-row import against a long log would otherwise crawl.
-    const compensated = new Set<ID>();
     await target.movements.each((movement) => {
       if (movement.undoOf) compensated.add(movement.undoOf);
     });
-    for (const entry of movementEntries) {
-      const movement = await target.movements.get(entry.movementId);
-      if (!movement || movement.undoOf) continue;
-      if (compensated.has(entry.movementId)) continue;
-      pending.push({
-        movementId: entry.movementId,
-        productId: movement.productId,
-        locationId: movement.locationId,
-        qty: movement.qty,
-      });
-    }
   }
 
-  // Two rows can hit the same shelf; check the combined effect.
-  const shelves = new Map<string, { productId: ID; locationId: ID; delta: number }>();
-  for (const row of pending) {
-    const key = `${row.productId}\u0000${row.locationId}`;
-    const shelf = shelves.get(key) ?? { productId: row.productId, locationId: row.locationId, delta: 0 };
-    shelf.delta -= row.qty;
-    shelves.set(key, shelf);
+  const candidates: Array<PendingMovement & { at: number }> = [];
+  for (const entry of movementEntries) {
+    const movement = await target.movements.get(entry.movementId);
+    if (!movement || movement.undoOf || compensated.has(entry.movementId)) {
+      plan.resolved.push(entry.id);
+      continue;
+    }
+    candidates.push({
+      entryId: entry.id,
+      movementId: entry.movementId,
+      productId: entry.productId,
+      locationId: movement.locationId,
+      qty: movement.qty,
+      at: movement.at,
+    });
   }
 
-  const blockers: ImportUndoBlocker[] = [];
-  for (const shelf of shelves.values()) {
-    const level = await target.stockLevels.get([shelf.productId, shelf.locationId]);
-    const after = (level?.qty ?? 0) + shelf.delta;
-    if (after < 0) {
-      blockers.push({
-        productId: shelf.productId,
-        productName: (await target.products.get(shelf.productId))?.name,
-        locationId: shelf.locationId,
-        level: after,
-      });
+  // Rows that add pieces back always fit; for the rest the largest deduction
+  // goes first, which returns the most stock for the rows that stay behind.
+  candidates.sort((a, b) => (a.qty <= 0 ? 0 : 1) - (b.qty <= 0 ? 0 : 1) || b.qty - a.qty || a.at - b.at);
+
+  const levels = new Map<string, number>();
+  for (const row of candidates) {
+    const key = shelfKey(row.productId, row.locationId);
+    if (!levels.has(key)) {
+      levels.set(key, (await target.stockLevels.get([row.productId, row.locationId]))?.qty ?? 0);
     }
+    const level = levels.get(key) ?? 0;
+    if (level - row.qty < 0) {
+      plan.blocked.push({
+        entryId: row.entryId,
+        kind: 'movement',
+        targetId: row.productId,
+        name: (await target.products.get(row.productId))?.name,
+        locationId: row.locationId,
+        locationName: locationNames.get(row.locationId),
+        reason: 'stock-used',
+        qty: row.qty - level,
+      });
+      continue;
+    }
+    levels.set(key, level - row.qty);
+    plan.pending.push(row);
   }
-  return { pending, blockers };
+
+  // A created product only goes when the compensations above leave nothing on
+  // its shelves, and no movement row of this import stays behind pointing at it
+  // (a zero level can still hide a row that was received and sold again).
+  const plannedDelta = new Map<ID, number>();
+  for (const row of plan.pending) {
+    plannedDelta.set(row.productId, (plannedDelta.get(row.productId) ?? 0) + row.qty);
+  }
+  const heldByMovement = new Set(
+    plan.blocked.filter((row) => row.kind === 'movement').map((row) => row.targetId),
+  );
+
+  for (const entry of entries) {
+    if (entry.kind !== 'product-created') continue;
+    const product = await target.products.get(entry.productId);
+    if (!product || product.deletedAt) {
+      plan.resolved.push(entry.id);
+      continue;
+    }
+    const qty = await remainingQty(entry.productId, plannedDelta.get(entry.productId) ?? 0, target);
+    if (qty !== 0 || heldByMovement.has(entry.productId)) {
+      plan.blocked.push({
+        entryId: entry.id,
+        kind: 'product-created',
+        targetId: entry.productId,
+        name: product.name,
+        reason: 'holds-stock',
+        qty,
+      });
+      continue;
+    }
+    plan.productDeletes.push({ entryId: entry.id, productId: entry.productId });
+  }
+
+  // Field restores are independent of stock, so they always revert.
+  for (const entry of entries) {
+    if (entry.kind !== 'product-updated') continue;
+    plan.restores.push({ entryId: entry.id, productId: entry.productId, before: entry.before });
+  }
+
+  const deletedProducts = new Set(plan.productDeletes.map((row) => row.productId));
+  for (const entry of entries) {
+    if (entry.kind !== 'brand-created') continue;
+    const brand = await target.brands.get(entry.brandId);
+    if (!brand || brand.deletedAt) {
+      plan.resolved.push(entry.id);
+      continue;
+    }
+    const users = await target.products
+      .filter((product) => product.brandId === entry.brandId && !product.deletedAt)
+      .toArray();
+    if (users.some((product) => !deletedProducts.has(product.id))) {
+      plan.blocked.push({
+        entryId: entry.id,
+        kind: 'brand-created',
+        targetId: entry.brandId,
+        name: brand.name,
+        reason: 'in-use',
+        qty: 0,
+      });
+      continue;
+    }
+    plan.brandDeletes.push({ entryId: entry.id, brandId: entry.brandId });
+  }
+
+  return plan;
+}
+
+function revertibleRows(plan: UndoPlan): number {
+  return plan.pending.length + plan.restores.length + plan.productDeletes.length + plan.brandDeletes.length;
 }
 
 /** Read-only dry run for the confirmation dialog. */
@@ -169,30 +314,37 @@ export async function previewImportUndo(
   if (!batch) throw new ImportBatchNotFoundError(batchId);
 
   const entries = await target.importEntries.where('batchId').equals(batchId).toArray();
-  const { pending, blockers } = await inspectMovements(entries, target);
+  const plan = await planImportUndo(entries, target);
   return {
     batch,
     entries: entries.length,
-    created: entries.filter((entry) => entry.kind === 'product-created').length,
-    updated: entries.filter((entry) => entry.kind === 'product-updated').length,
-    movements: pending.length,
-    brands: entries.filter((entry) => entry.kind === 'brand-created').length,
-    blockers,
+    created: plan.productDeletes.length,
+    updated: plan.restores.length,
+    movements: plan.pending.length,
+    brands: plan.brandDeletes.length,
+    undoableRows: revertibleRows(plan),
+    blockedRows: plan.blocked,
   };
 }
 
 export interface UndoImportResult {
   batchId: ID;
+  /** True when some rows had to stay behind; the batch stays undoable. */
+  partial: boolean;
   movementsUndone: number;
-  movementsSkipped: number;
   productsDeleted: number;
   productsRestored: number;
   brandsDeleted: number;
+  /** Journal rows that stayed behind. */
+  rowsLeft: number;
+  blocked: ImportUndoBlockedRow[];
 }
 
 /**
- * All-or-nothing revert of one import: compensating movements, restored field
- * values, created products and brands soft-deleted, then the journal is cleared.
+ * Reverts one import: compensating movements, restored field values, soft-deleted
+ * created products and brands. Rows whose stock was used since stay in the
+ * journal and are reported back; only a batch with nothing at all to revert is
+ * refused outright.
  */
 export async function undoImportBatch(
   batchId: ID,
@@ -205,6 +357,7 @@ export async function undoImportBatch(
       target.importEntries,
       target.products,
       target.brands,
+      target.locations,
       target.movements,
       target.stockLevels,
       target.priceChanges,
@@ -217,51 +370,59 @@ export async function undoImportBatch(
       const entries = await target.importEntries.where('batchId').equals(batchId).toArray();
       if (entries.length === 0) throw new ImportNothingToUndoError(batchId);
 
-      const { pending, blockers } = await inspectMovements(entries, target);
-      if (blockers.length > 0) throw new ImportUndoBlockedError(blockers);
+      const plan = await planImportUndo(entries, target);
+      // Nothing can be reverted at all: refuse and name every stuck row, as before.
+      if (revertibleRows(plan) === 0) throw new ImportUndoBlockedError(plan.blocked);
 
-      for (const row of pending) await undoMovement(row.movementId, target);
+      for (const row of plan.pending) await undoMovement(row.movementId, target);
 
       let productsRestored = 0;
-      for (const entry of entries) {
-        if (entry.kind !== 'product-updated') continue;
-        await updateProduct(entry.productId, { ...entry.before }, { reason: IMPORT_UNDO_REASON }, target);
+      for (const row of plan.restores) {
+        await updateProduct(row.productId, { ...row.before }, { reason: IMPORT_UNDO_REASON }, target);
         productsRestored += 1;
       }
 
       let productsDeleted = 0;
-      for (const entry of entries) {
-        if (entry.kind !== 'product-created') continue;
-        const product = await target.products.get(entry.productId);
-        if (!product || product.deletedAt) continue;
-        await softDeleteProduct(entry.productId, target);
+      for (const row of plan.productDeletes) {
+        await softDeleteProduct(row.productId, target);
         productsDeleted += 1;
       }
 
       let brandsDeleted = 0;
-      for (const entry of entries) {
-        if (entry.kind !== 'brand-created') continue;
-        const brand = await target.brands.get(entry.brandId);
-        if (!brand || brand.deletedAt) continue;
-        const stillUsed = await target.products
-          .filter((product) => product.brandId === entry.brandId && !product.deletedAt)
-          .count();
-        if (stillUsed > 0) continue;
-        await softDelete('brands', entry.brandId, target);
+      for (const row of plan.brandDeletes) {
+        await softDelete('brands', row.brandId, target);
         brandsDeleted += 1;
       }
 
-      await target.importEntries.where('batchId').equals(batchId).delete();
+      const cleared = [
+        ...plan.pending.map((row) => row.entryId),
+        ...plan.restores.map((row) => row.entryId),
+        ...plan.productDeletes.map((row) => row.entryId),
+        ...plan.brandDeletes.map((row) => row.entryId),
+        ...plan.resolved,
+      ];
+      if (cleared.length > 0) await target.importEntries.bulkDelete(cleared);
+
       const at = Date.now();
-      await target.imports.update(batchId, { undoneAt: at, updatedAt: at });
+      if (plan.blocked.length === 0) {
+        await target.imports.update(batchId, { undoneAt: at, updatedAt: at });
+      } else {
+        await target.imports.update(batchId, {
+          partialUndoAt: at,
+          partialRows: plan.blocked.length,
+          updatedAt: at,
+        });
+      }
 
       return {
         batchId,
-        movementsUndone: pending.length,
-        movementsSkipped: Math.max(0, batch.movements - pending.length),
+        partial: plan.blocked.length > 0,
+        movementsUndone: plan.pending.length,
         productsDeleted,
         productsRestored,
         brandsDeleted,
+        rowsLeft: plan.blocked.length,
+        blocked: plan.blocked,
       };
     },
   );

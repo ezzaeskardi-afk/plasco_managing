@@ -29,6 +29,7 @@ const TITLES: ReadonlyArray<readonly [string, string]> = [
   ['/movements', fa.movements.title],
   ['/stocktake', fa.stocktake.title],
   ['/stock', fa.stock.receive],
+  ['/more/status', fa.status.title],
   ['/more', fa.nav.more],
   ['/', fa.dashboard.title],
 ];

@@ -221,7 +221,7 @@ export function DataPage() {
       <Panel className="mb-6">
         <h2 className="mb-3 flex items-center gap-2 text-title font-bold text-ink">
           <Download className="size-5 text-basin" />
-          اکسپورت
+          {fa.importexport.exportTitle}
         </h2>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" disabled={busy} onClick={() => void exportData('xlsx')}>

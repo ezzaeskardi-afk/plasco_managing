@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { SCHEMA_VERSION } from '@/app/version';
 import { createBackup, readBackup, restoreBackup, BackupInvalidError } from './backup';
 import { PlascoDb } from './dexie';
 import { applyMovement } from './movements';
@@ -53,7 +54,8 @@ describe('backup and restore', () => {
     expect((await db.settings.get('lastBackupAt'))?.value).toBeTypeOf('number');
 
     const { data } = await readBackup(blob);
-    expect(data.schemaVersion).toBe(1);
+    // The stamp follows the schema generation, not a frozen number.
+    expect(data.schemaVersion).toBe(SCHEMA_VERSION);
     expect(data.tables.products).toHaveLength(1);
 
     // Wipe, then restore.

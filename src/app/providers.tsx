@@ -92,7 +92,6 @@ export function AppProviders({ children }: { children: ReactNode }) {
           position="top-center"
           dir="rtl"
           closeButton={false}
-          closeButtonAriaLabel={fa.actions.close}
           containerAriaLabel={fa.common.notifications}
           toastOptions={{ style: { fontFamily: 'inherit' } }}
         />

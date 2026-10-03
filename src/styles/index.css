@@ -116,15 +116,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Sonner draws a 20 px close circle; widen the hit area to a thumb (AGENTS.md 8). */
-[data-sonner-toast] [data-close-button]::after {
-  content: '';
-  position: absolute;
-  inset: -14px;
-}
-
-/* ...and its action chip is 24 px tall, too small for a phone. Two attributes
-   to outrank sonner's own `[data-sonner-toast][data-styled] [data-button]`. */
+/* Sonner draws 24 px chips for its action and cancel buttons - too small for a
+   thumb (AGENTS.md 8). Two attributes to outrank sonner's own
+   `[data-sonner-toast][data-styled] [data-button]`. */
 [data-sonner-toast][data-styled='true'] [data-button] {
   min-height: 2.75rem;
   padding-inline: 1rem;

@@ -4,6 +4,7 @@ import {
   Database,
   Download,
   HardDrive,
+  Info,
   Settings as SettingsIcon,
   ShieldCheck,
   Smartphone,
@@ -122,6 +123,12 @@ export function MorePage() {
           hint={settings.shopName}
           icon={SettingsIcon}
           onClick={() => navigate('/more/settings')}
+        />
+        <Row
+          label={fa.status.title}
+          hint={`${fa.settings.version} ${APP_VERSION} · ${fa.status.serviceWorker}`}
+          icon={Info}
+          onClick={() => navigate('/more/status')}
         />
       </Panel>
 

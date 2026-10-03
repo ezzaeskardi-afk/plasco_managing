@@ -196,14 +196,21 @@ export function DataPage() {
                 {batch.undoneAt ? (
                   <span className="text-[0.8rem] text-crate">{fa.importexport.historyUndone}</span>
                 ) : (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void confirmAndUndoImport(batch.id)}
-                  >
-                    <Undo2 className="size-4" />
-                    {fa.actions.undo}
-                  </Button>
+                  <div className="flex flex-col items-end gap-1">
+                    {batch.partialUndoAt ? (
+                      <span className="text-[0.8rem] text-low">
+                        {fa.importexport.historyPartial.replace('{count}', formatQty(batch.partialRows ?? 0))}
+                      </span>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void confirmAndUndoImport(batch.id)}
+                    >
+                      <Undo2 className="size-4" />
+                      {batch.partialUndoAt ? fa.importexport.undoRemaining : fa.actions.undo}
+                    </Button>
+                  </div>
                 )}
               </li>
             ))}

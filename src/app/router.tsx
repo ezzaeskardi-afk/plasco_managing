@@ -14,6 +14,7 @@ import {
 } from '@/features/stocktake/StockTakePages';
 import { DataPage } from '@/features/importexport/DataPage';
 import { MorePage } from '@/features/settings/MorePage';
+import { StatusPage } from '@/features/settings/StatusPage';
 import { LabelsPage } from '@/features/settings/LabelsPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 
@@ -37,6 +38,7 @@ export function AppRouter() {
           <Route path="more/labels" element={<LabelsPage />} />
           <Route path="more/data" element={<DataPage />} />
           <Route path="more/settings" element={<SettingsPage />} />
+          <Route path="more/status" element={<StatusPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { ChevronLeft, Download, Sparkles } from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { isBackupStale } from '@/app/appStatus';
 import { APP_VERSION } from '@/app/version';
 import { MoneyText, Panel, Section } from '@/components/common/Kpi';
 import { StockStack } from '@/components/common/StockStack';
@@ -15,8 +16,6 @@ import { stockAlerts, valuate, type GroupValuation } from '@/domain/valuation';
 import { fa } from '@/i18n/fa';
 import { toastSuccess } from '@/lib/toast';
 import { useSettings } from '@/app/settings-context';
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -42,7 +41,7 @@ export function DashboardPage() {
 
   if (!products || !levels) return <p className="text-crate">{fa.common.loading}</p>;
 
-  const backupStale = !settings.lastBackupAt || Date.now() - settings.lastBackupAt > WEEK_MS;
+  const backupStale = isBackupStale(settings.lastBackupAt);
 
   if (products.length === 0) {
     return (

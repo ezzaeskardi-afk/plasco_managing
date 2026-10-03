@@ -53,16 +53,20 @@ npm run dist:zip     # build + چک‌لیست + ساخت plasco-managing-dist.z
 
 ### انتشار نسخهٔ تازه روی همین سایت
 
+**با یک دوبار کلیک (ویندوز):** فایل `publish-site.bat` در ریشهٔ پروژه را دوبار کلیک کن؛ خودش برنامه را می‌سازد، فایل‌های آماده را در شاخهٔ `gh-pages` می‌گذارد و آدرس سایت را نشان می‌دهد.
+
+**دستی (لینوکس/مک یا وقتی `gh` نصب نیست):**
+
 ```bash
 npm run build
 mkdir -p /tmp/plasco-pages && cp -r dist/. /tmp/plasco-pages/
 touch /tmp/plasco-pages/.nojekyll
 cd /tmp/plasco-pages && git init -q -b gh-pages && git add -A
-git commit -q -m "انتشار تازه"
+git commit -q --allow-empty -m "انتشار تازه"
 git push -f https://github.com/ezzaeskardi-afk/plasco_managing.git gh-pages
 ```
 
-یک بار `gh auth login` کافی است تا گیت رمز گیت‌هاب را از همان توکن بخواند. یکی‑دو دقیقه بعد سایت به‌روز می‌شود؛ «بیشتر ← وضعیت اپ» در اپ‌های نصب‌شده پیام «نسخهٔ جدید آماده است» می‌دهد.
+یک بار `gh auth login` کافی است تا گیت رمز گیت‌هاب را از همان توکن بخواند (فایل `.bat` همین کار را خودکار می‌کند). یکی‑دو دقیقه بعد سایت به‌روز می‌شود؛ «بیشتر ← وضعیت برنامه» در اپ‌های نصب‌شده پیام «نسخهٔ تازهٔ برنامه آماده است» می‌دهد.
 
 ## ۳. آپلود
 

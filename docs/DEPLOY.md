@@ -41,6 +41,29 @@ npm run dist:zip     # build + چک‌لیست + ساخت plasco-managing-dist.z
 
 معیارها: پشتیبانی HTTPS، اجازه‌ی بکش‌نکردن `sw.js` (تنظیم هدر)، و اینکه سرور فایل‌های ناشناس را ۴۰۴ ندهد.
 
+## ۲٫۵. سایت آمادهٔ ما روی GitHub Pages
+
+نسخهٔ فعلی همین حالا روی این آدرس منتشر است (HTTPS، نصب‌شدنی، بدون هزینه):
+
+**https://ezzaeskardi-afk.github.io/plasco_managing/**
+
+- روی کامپیوتر بازش کن و در کروم آیکون نصب (⊕) را بزن.
+- روی آیفون، در **Safari** بازش کن ← دکمهٔ اشتراک‌گذاری ← «Add to Home Screen».
+- سایت از شاخهٔ `gh-pages` سرو می‌شود (فقط فایل‌های `dist/`)، مخزن `main` کد است.
+
+### انتشار نسخهٔ تازه روی همین سایت
+
+```bash
+npm run build
+mkdir -p /tmp/plasco-pages && cp -r dist/. /tmp/plasco-pages/
+touch /tmp/plasco-pages/.nojekyll
+cd /tmp/plasco-pages && git init -q -b gh-pages && git add -A
+git commit -q -m "انتشار تازه"
+git push -f https://github.com/ezzaeskardi-afk/plasco_managing.git gh-pages
+```
+
+یک بار `gh auth login` کافی است تا گیت رمز گیت‌هاب را از همان توکن بخواند. یکی‑دو دقیقه بعد سایت به‌روز می‌شود؛ «بیشتر ← وضعیت اپ» در اپ‌های نصب‌شده پیام «نسخهٔ جدید آماده است» می‌دهد.
+
 ## ۳. آپلود
 
 **cPanel (File Manager):**

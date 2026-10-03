@@ -13,3 +13,6 @@ coverage
 # Local environment files (the app itself never reads them)
 .env
 .env.*
+
+# Packaged build for uploading to a host (npm run dist:zip)
+plasco-managing-dist.zip

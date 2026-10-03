@@ -9,8 +9,12 @@
 ## ۱. آماده‌سازی خروجی
 
 ```bash
-npm run build      # خروجی در dist/
+npm run build        # خروجی در dist/
+npm run dist:check   # فقط چک‌لیست: sw.js، مانیفست، هدرها، آیکون‌ها، حجم، تازگی بیلد
+npm run dist:zip     # build + چک‌لیست + ساخت plasco-managing-dist.zip برای آپلود
 ```
+
+`npm run dist:zip` یک فایل `plasco-managing-dist.zip` در ریشهٔ پروژه می‌سازد که محتوایش همان فایل‌های آمادهٔ آپلود است (بدون `preview.html`) و همیشه از بیلد همین لحظه ساخته می‌شود. اگر چک‌لیست یک مورد **حیاتی** را ✗ ببیند (مثلاً `sw.js` نبود)، زیپ ساخته نمی‌شود تا نسخهٔ ناقص منتشر نشود.
 
 محتوای `dist/` بعد از ساخت این‌هاست:
 
@@ -41,9 +45,9 @@ npm run build      # خروجی در dist/
 
 **cPanel (File Manager):**
 
-1. `dist/` را زیپ کن (محتوایش، مثلاً `plasco.zip`).
+1. `npm run dist:zip` را بزن؛ فایل `plasco-managing-dist.zip` ساخته می‌شود (چک‌لیست هم قبلش چاپ می‌شود).
 2. File Manager ← `public_html` (برای ساب‌دامین: پوشه‌ی همان ساب‌دامین).
-3. Upload ← Extract. در پایان باید `public_html/index.html` و `public_html/sw.js` را ببینی.
+3. Upload ← Extract همان زیپ. در پایان باید `public_html/index.html` و `public_html/sw.js` را ببینی (فایل `.htaccess` هم باید آنجا باشد).
 4. زیرپوشه (مثل `public_html/plasco/`) هم بلامانع است؛ آدرس نهایی `https://example.com/plasco/` می‌شود.
 
 **Netlify/Cloudflare Pages:** پوشه‌ی `dist/` را Drag & Drop کن (Build command خالی، Publish directory همان `dist`).
@@ -137,7 +141,7 @@ npm run preview:file   # build + ساخت dist/preview.html
 ## ۹. انتشار نسخه‌های بعدی
 
 1. از اپ پشتیبان بگیر.
-2. `npm run build` بزن و **کل محتوای تازه‌ی `dist/` را روی قبلی جایگزین کن** (فایل‌های قدیمی `assets/` را می‌توانی پاک کنی؛ خطرناک نیستند).
+2. `npm run dist:zip` بزن (خودش بیلد می‌کند و چک‌لیست می‌دهد) و **محتوای زیپ تازه را روی قبلی جایگزین/Extract کن** (فایل‌های قدیمی `assets/` را می‌توانی پاک کنی؛ خطرناک نیستند).
 3. آدرس تغییر نمی‌کند → همان origin → **داده‌ی نصب‌شده حفظ می‌شود**؛ فقط آیکون اپ یک‌بار با نوتیف به‌روزرسانی می‌آید.
 4. اگر مجبور شدی دامنه را عوض کنی (origin جدید)، اپ را دوباره نصب کن و از فایل پشتیبان بازگردانی بزن.
 

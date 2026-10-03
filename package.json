@@ -63,6 +63,7 @@
     "fake-indexeddb": "^6.0.0",
     "globals": "^15.14.0",
     "jsdom": "^25.0.1",
+    "jsqr": "^1.4.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.19.0",

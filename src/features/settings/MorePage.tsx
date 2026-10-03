@@ -33,6 +33,8 @@ import {
 import { readPersistState, requestPersist, type PersistState } from '@/app/persistStorage';
 import { useSettings } from '@/app/settings-context';
 import { saveBlob } from '@/features/importexport/spreadsheet';
+import { SiteQrCode } from './SiteQrCode';
+import { SITE_URL } from './installQr';
 
 function Row({
   label,
@@ -216,6 +218,17 @@ export function MorePage() {
             ) : null}
           </div>
         )}
+
+        <div className="mt-4 flex items-start gap-3 border-t border-line pt-4">
+          <SiteQrCode className="size-[7.5rem] shrink-0 rounded-input border border-line bg-white p-1" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[0.9rem] text-ink">{fa.settings.installQrTitle}</p>
+            <p className="mt-1 text-[0.8rem] text-crate">{fa.settings.installQrHint}</p>
+            <p dir="ltr" className="mt-1 select-all break-all text-[0.8rem] text-basin">
+              {SITE_URL}
+            </p>
+          </div>
+        </div>
 
         <p className="mt-3 text-[0.8rem] text-crate">{fa.settings.installOfflineHint}</p>
         <p className="mt-1 text-[0.8rem] text-crate">{fa.settings.installDataNote}</p>

@@ -16,6 +16,8 @@
     "icons": "node scripts/gen-icons.mjs",
     "preview:build": "node scripts/build-preview.mjs",
     "preview:file": "npm run build && npm run preview:build",
+    "dist:check": "node scripts/pack-dist.mjs --check",
+    "dist:zip": "npm run build && node scripts/pack-dist.mjs",
     "verify": "npm run typecheck && npm run lint && npm run check:rtl && npm run test && npm run build"
   },
   "dependencies": {

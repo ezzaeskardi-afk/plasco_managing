@@ -1,7 +1,7 @@
 import { db as defaultDb, type PlascoDb } from './dexie';
 import { undoMovement } from './movements';
 import { softDelete, softDeleteProduct, updateProduct } from './repos';
-import type { ID, ImportBatch, ImportedProductFields, ImportEntry } from './types';
+import type { Brand, ID, ImportBatch, ImportedProductFields, ImportEntry, Product } from './types';
 
 /**
  * Every commit writes a journal (`imports` + `importEntries`) in the same
@@ -114,8 +114,21 @@ export interface ImportUndoPreview {
   movements: number;
   brands: number;
   undoableRows: number;
+  /** The rows the undo would revert right now, named for the message. */
+  plannedRows: ImportUndoPlannedRow[];
   /** Rows that would stay behind, named so the user knows which ones. */
   blockedRows: ImportUndoBlockedRow[];
+}
+
+/** One row the undo will revert right now, carried so the UI can name it. */
+export interface ImportUndoPlannedRow {
+  entryId: ID;
+  kind: ImportEntry['kind'];
+  name?: string;
+  /** Movement rows only: the shelf the pieces go back to. */
+  locationName?: string;
+  /** Pieces involved; 0 for rows that carry no stock. */
+  qty: number;
 }
 
 interface PendingMovement {
@@ -150,6 +163,7 @@ interface UndoPlan {
   brandDeletes: PlannedBrandDelete[];
   /** Journal rows with nothing left to revert (already compensated or gone). */
   resolved: ID[];
+  planned: ImportUndoPlannedRow[];
   blocked: ImportUndoBlockedRow[];
 }
 
@@ -175,9 +189,27 @@ async function planImportUndo(entries: readonly ImportEntry[], target: PlascoDb)
     productDeletes: [],
     brandDeletes: [],
     resolved: [],
+    planned: [],
     blocked: [],
   };
   const locationNames = new Map((await target.locations.toArray()).map((row) => [row.id, row.name]));
+
+  // Names up front: one bulk read instead of a lookup per row, and both lists the
+  // dialog prints (what reverts, what stays) can name every row.
+  const productIds = new Set<ID>();
+  const brandIds = new Set<ID>();
+  for (const entry of entries) {
+    if (entry.kind === 'brand-created') brandIds.add(entry.brandId);
+    else productIds.add(entry.productId);
+  }
+  const products = new Map<ID, Product>();
+  for (const product of await target.products.bulkGet([...productIds])) {
+    if (product) products.set(product.id, product);
+  }
+  const brands = new Map<ID, Brand>();
+  for (const brand of await target.brands.bulkGet([...brandIds])) {
+    if (brand) brands.set(brand.id, brand);
+  }
 
   const movementEntries = entries.filter((entry) => entry.kind === 'movement');
   const compensated = new Set<ID>();
@@ -222,7 +254,7 @@ async function planImportUndo(entries: readonly ImportEntry[], target: PlascoDb)
         entryId: row.entryId,
         kind: 'movement',
         targetId: row.productId,
-        name: (await target.products.get(row.productId))?.name,
+        name: products.get(row.productId)?.name,
         locationId: row.locationId,
         locationName: locationNames.get(row.locationId),
         reason: 'stock-used',
@@ -247,7 +279,7 @@ async function planImportUndo(entries: readonly ImportEntry[], target: PlascoDb)
 
   for (const entry of entries) {
     if (entry.kind !== 'product-created') continue;
-    const product = await target.products.get(entry.productId);
+    const product = products.get(entry.productId);
     if (!product || product.deletedAt) {
       plan.resolved.push(entry.id);
       continue;
@@ -276,7 +308,7 @@ async function planImportUndo(entries: readonly ImportEntry[], target: PlascoDb)
   const deletedProducts = new Set(plan.productDeletes.map((row) => row.productId));
   for (const entry of entries) {
     if (entry.kind !== 'brand-created') continue;
-    const brand = await target.brands.get(entry.brandId);
+    const brand = brands.get(entry.brandId);
     if (!brand || brand.deletedAt) {
       plan.resolved.push(entry.id);
       continue;
@@ -297,6 +329,47 @@ async function planImportUndo(entries: readonly ImportEntry[], target: PlascoDb)
     }
     plan.brandDeletes.push({ entryId: entry.id, brandId: entry.brandId });
   }
+
+  // Same product's rows next to each other, so the dialog reads them as one story.
+  for (const row of plan.pending) {
+    plan.planned.push({
+      entryId: row.entryId,
+      kind: 'movement',
+      name: products.get(row.productId)?.name,
+      locationName: locationNames.get(row.locationId),
+      qty: row.qty,
+    });
+  }
+  for (const row of plan.productDeletes) {
+    plan.planned.push({
+      entryId: row.entryId,
+      kind: 'product-created',
+      name: products.get(row.productId)?.name,
+      qty: 0,
+    });
+  }
+  for (const row of plan.restores) {
+    plan.planned.push({
+      entryId: row.entryId,
+      kind: 'product-updated',
+      name: products.get(row.productId)?.name,
+      qty: 0,
+    });
+  }
+  for (const row of plan.brandDeletes) {
+    plan.planned.push({
+      entryId: row.entryId,
+      kind: 'brand-created',
+      name: brands.get(row.brandId)?.name,
+      qty: 0,
+    });
+  }
+  plan.planned.sort(
+    (a, b) =>
+      (a.name ?? '').localeCompare(b.name ?? '', 'fa') ||
+      a.kind.localeCompare(b.kind) ||
+      a.entryId.localeCompare(b.entryId),
+  );
 
   return plan;
 }
@@ -323,6 +396,7 @@ export async function previewImportUndo(
     movements: plan.pending.length,
     brands: plan.brandDeletes.length,
     undoableRows: revertibleRows(plan),
+    plannedRows: plan.planned,
     blockedRows: plan.blocked,
   };
 }

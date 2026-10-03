@@ -124,6 +124,7 @@ describe('undoImportBatch', () => {
     // The opening movement needs 10 pieces and only 6 are left; the product row
     // is stuck with it. Nothing at all can be reverted, so the undo refuses.
     expect(preview.undoableRows).toBe(0);
+    expect(preview.plannedRows).toEqual([]);
     expect(preview.blockedRows.map((row) => [row.name, row.reason])).toEqual([
       ['سطل', 'stock-used'],
       ['سطل', 'holds-stock'],
@@ -166,11 +167,17 @@ describe('undoImportBatch', () => {
     const preview = await previewImportUndo(batchId, db);
     // The basket's movement and its product row revert; the bucket's two stay.
     expect(preview.undoableRows).toBe(2);
+    expect(preview.plannedRows.map((row) => [row.name, row.kind, row.qty])).toEqual([
+      ['سبد', 'movement', 5],
+      ['سبد', 'product-created', 0],
+    ]);
+    expect(preview.plannedRows[0]?.locationName).toBeTruthy();
     expect(preview.blockedRows.map((row) => [row.name, row.reason])).toEqual([
       ['سطل', 'stock-used'],
       ['سطل', 'holds-stock'],
     ]);
     expect(preview.blockedRows[0]?.qty).toBe(4);
+    expect(preview.blockedRows[0]?.name).toBe('سطل');
 
     const outcome = await undoImportBatch(batchId, db);
     expect(outcome.partial).toBe(true);

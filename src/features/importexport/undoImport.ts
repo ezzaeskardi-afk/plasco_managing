@@ -4,6 +4,7 @@ import {
   previewImportUndo,
   undoImportBatch,
   type ImportUndoBlockedRow,
+  type ImportUndoPlannedRow,
 } from '@/db/imports';
 import { formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
@@ -34,6 +35,33 @@ function blockedList(rows: readonly ImportUndoBlockedRow[]): string {
   return labels.join('، ');
 }
 
+function kindLabel(kind: ImportUndoPlannedRow['kind']): string {
+  if (kind === 'product-created') return fa.importexport.undoKindCreated;
+  if (kind === 'product-updated') return fa.importexport.undoKindUpdated;
+  if (kind === 'brand-created') return fa.importexport.undoKindBrand;
+  return fa.importexport.undoKindMovement;
+}
+
+/** «سبد — حرکت انبار در انبار (۵ عدد)» - one row of the undo list. */
+function plannedText(row: ImportUndoPlannedRow): string {
+  const name = row.name ?? fa.common.unknown;
+  if (row.kind === 'movement') {
+    return fa.importexport.undoPlannedMovement
+      .replace('{name}', name)
+      .replace('{location}', row.locationName ?? fa.common.location)
+      .replace('{qty}', formatQty(Math.abs(row.qty)));
+  }
+  return fa.importexport.undoPlannedRow.replace('{name}', name).replace('{kind}', kindLabel(row.kind));
+}
+
+/** The rows that revert now: five names, then «و N ردیف دیگر». */
+function plannedList(rows: readonly ImportUndoPlannedRow[]): string {
+  const labels = rows.slice(0, 5).map(plannedText);
+  const rest = rows.length - labels.length;
+  if (rest > 0) labels.push(fa.importexport.undoRowMore.replace('{count}', formatQty(rest)));
+  return labels.join('، ');
+}
+
 function detailLine(counts: { created: number; updated: number; movements: number }): string {
   return fa.importexport.undoConfirmDetail
     .replace('{created}', formatQty(counts.created))
@@ -56,12 +84,16 @@ export async function confirmAndUndoImport(batchId: ID): Promise<boolean> {
     }
 
     const detail = detailLine(preview);
+    // A partial undo lists both sides by name: what goes back now, and what has
+    // to wait (and why). The counts alone never said which rows were which.
     const question =
       preview.blockedRows.length > 0
         ? [
             fa.importexport.undoPartial,
+            fa.importexport.undoPlanned
+              .replace('{count}', formatQty(preview.undoableRows))
+              .replace('{rows}', plannedList(preview.plannedRows)),
             fa.importexport.undoPartialWhy.replace('{names}', blockedList(preview.blockedRows)),
-            detail,
             fa.importexport.undoPartialAsk,
           ].join('\n\n')
         : `${fa.importexport.undoConfirm}\n\n${detail}`;

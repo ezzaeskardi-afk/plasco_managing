@@ -16,6 +16,23 @@ export function toastUndo(message: string, onUndo: () => unknown): void {
   });
 }
 
+/**
+ * A toast that offers something to do right now — unlike `toastUndo`, which walks
+ * back what just happened. The caller owns the action.
+ */
+export function toastAction(
+  message: string,
+  description: string,
+  label: string,
+  onClick: () => unknown,
+): void {
+  toast(message, {
+    duration: 9000,
+    description,
+    action: { label, onClick: () => void onClick() },
+  });
+}
+
 export function toastError(message: string, description?: string): void {
   toast.error(message, { description });
 }

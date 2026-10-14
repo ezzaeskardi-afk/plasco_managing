@@ -18,6 +18,21 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Plasco">
 
+        <!--
+            عکس کالا با دوربین خود گوشی گرفته می‌شود؛ برنامه فقط جای فایل را به‌صورت
+            محتوایی می‌دهد، پس نه مجوز ذخیره‌سازی لازم است و نه مجوز دوربین (خودِ
+            برنامهٔ دوربین گوشی عکس را می‌گیرد).
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

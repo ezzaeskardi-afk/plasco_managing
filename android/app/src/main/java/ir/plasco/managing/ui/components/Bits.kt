@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -214,7 +213,7 @@ fun ProductRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Thumb(title = product.name)
+        ProductThumb(productId = product.id, name = product.name)
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -233,24 +232,6 @@ fun ProductRow(
         Text(formatNumber(total), fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.width(8.dp))
         StockStack(total = total, minStock = product.minStock)
-    }
-}
-
-/** جای عکس کالا؛ عکس هنوز در این نسخه پیاده نشده و حرف اول نام نشان داده می‌شود. */
-@Composable
-fun Thumb(title: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .size(44.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            title.trim().take(1),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

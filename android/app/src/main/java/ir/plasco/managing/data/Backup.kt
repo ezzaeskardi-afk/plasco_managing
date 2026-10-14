@@ -14,8 +14,8 @@ import java.util.zip.ZipOutputStream
 
 /**
  * بکاپ و بازیابی به‌شکل نسخهٔ وب: یک فایل ZIP که داخلش `data.json` است با
- * `{ schemaVersion, exportedAt, tables }`. عکس‌ها در این نسخه وجود ندارند، پس
- * فایل بدون پوشهٔ `photos/` ساخته می‌شود و نسخهٔ وب هم آن را می‌خواند.
+ * `{ schemaVersion, exportedAt, tables }` و عکس‌ها به‌شکل `photos/<productId>-thumb.jpg`
+ * و `-full.jpg`. پس فایل این نسخه و نسخهٔ وب در هر دو جهت روی هم می‌نشینند.
  *
  * دو حالت بازیابی:
  * - **جایگزینی**: همه‌چیز پاک و بکاپ بارگذاری می‌شود (اسم دستگاه حفظ می‌شود).
@@ -28,9 +28,18 @@ class BackupInvalidException(val detail: String? = null) : Exception("BackupInva
 
 enum class RestoreMode { Replace, Merge }
 
-data class BackupSummary(val products: Int, val movements: Int, val bytes: Int)
+data class BackupSummary(val products: Int, val movements: Int, val photos: Int, val bytes: Int)
 
-data class RestoreSummary(val mode: RestoreMode, val products: Int, val movements: Int, val renumbered: Int)
+data class RestoreSummary(
+    val mode: RestoreMode,
+    val products: Int,
+    val movements: Int,
+    val photos: Int,
+    val renumbered: Int,
+)
+
+/** همان چیزی که `parseBackup` از فایل درمی‌آورد. */
+private data class ParsedBackup(val tables: JSONObject, val exportedAt: Long)
 
 /** شمارهٔ قالب بکاپ؛ همان نسخهٔ اسکیمای نسخهٔ وب است، نه نسخهٔ جدول‌های اندروید. */
 const val BACKUP_SCHEMA_VERSION = 2
@@ -180,17 +189,19 @@ class BackupRepo(
         tables.put("settings", exportSettings(db))
         root.put("tables", tables)
 
+        var photos = 0
         val bytes = withContext(Dispatchers.IO) {
             val out = ByteArrayOutputStream()
             ZipOutputStream(out).use { zip ->
                 zip.putNextEntry(ZipEntry("data.json"))
                 zip.write(root.toString().toByteArray(Charsets.UTF_8))
                 zip.closeEntry()
+                photos = BackupPhotos.write(zip, db)
             }
             out.toByteArray()
         }
         settings.update { it.copy(lastBackupAt = System.currentTimeMillis()) }
-        return bytes to BackupSummary(products, movements, bytes.size)
+        return bytes to BackupSummary(products, movements, photos, bytes.size)
     }
 
     /**
@@ -198,9 +209,11 @@ class BackupRepo(
      * هیچ چیزی عوض نمی‌شود (خطای BackupInvalidException با علت خوانا).
      */
     suspend fun restore(bytes: ByteArray, mode: RestoreMode): RestoreSummary {
-        val data = parseBackup(bytes)
+        val parsed = parseBackup(bytes)
+        val data = parsed.tables
         var products = 0
         var movements = 0
+        var photos = 0
         var renumbered = 0
 
         val db = helper.writableDatabase
@@ -232,7 +245,9 @@ class BackupRepo(
                     if (spec.name == "movements") movements += 1
                 }
             }
-            writeSettings(db, data.optJSONArray("settings"))
+            writeSettings(db, data.optJSONArray("settings"), mode)
+            // عکس‌ها هم داخل همان تراکنش می‌نشینند: یا همه می‌آیند یا هیچ‌کدام.
+            photos = BackupPhotos.restore(bytes, parsed.exportedAt, mode, db)
             // موجودی‌ها همیشه از روی حرکات بازسازی می‌شوند (قفسه‌ها حفظ).
             stock.rebuildLevelsInTransaction(db)
             if (renumbered > 0) {
@@ -243,23 +258,24 @@ class BackupRepo(
             db.endTransaction()
         }
         hub.reloadAll()
-        return RestoreSummary(mode, products, movements, renumbered)
+        return RestoreSummary(mode, products, movements, photos, renumbered)
     }
 
     /** فایل را می‌خواند و فقط ساختار را بررسی می‌کند (برای پیش‌نمایش). */
     suspend fun inspect(bytes: ByteArray): RestoreSummary = withContext(Dispatchers.IO) {
-        val data = parseBackup(bytes)
+        val data = parseBackup(bytes).tables
         RestoreSummary(
             mode = RestoreMode.Merge,
             products = data.optJSONArray("products")?.length() ?: 0,
             movements = data.optJSONArray("movements")?.length() ?: 0,
+            photos = BackupPhotos.count(bytes),
             renumbered = 0,
         )
     }
 
     // --- خواندن و نوشتن ---
 
-    private fun parseBackup(bytes: ByteArray): JSONObject {
+    private fun parseBackup(bytes: ByteArray): ParsedBackup {
         val json = readDataJson(bytes)
         val parsed = try {
             JSONObject(json)
@@ -270,7 +286,8 @@ class BackupRepo(
         val version = parsed.optInt("schemaVersion", -1)
         if (version < 0) throw BackupInvalidException("schema-missing")
         if (version > BACKUP_SCHEMA_VERSION) throw BackupInvalidException("schema-newer:$version")
-        return parsed.optJSONObject("tables") ?: throw BackupInvalidException("tables-missing")
+        val tables = parsed.optJSONObject("tables") ?: throw BackupInvalidException("tables-missing")
+        return ParsedBackup(tables, parsed.optLong("exportedAt", 0L))
     }
 
     private fun readDataJson(bytes: ByteArray): String {
@@ -401,8 +418,16 @@ class BackupRepo(
         return true
     }
 
-    /** اسم و پیشوند دستگاه از بکاپ گرفته نمی‌شود؛ هویت هر گوشی مال خودش است. */
-    private fun writeSettings(db: SQLiteDatabase, rows: JSONArray?) {
+    /**
+     * تنظیمات بکاپ.
+     *
+     * در «جایگزینی» تنظیمات فایل می‌نشیند — به‌جز اسم و پیشوند دستگاه که هویت هر گوشی
+     * مال خودش است. در «ادغام» هیچ تنظیم نمایشی‌ای از فایل دیگری گرفته نمی‌شود (همان
+     * کاری که نسخهٔ وب می‌کند): اسم فروشگاه، واحد پول، رنگ، اندازهٔ متن و آخرین بکاپ
+     * مال همین دستگاه‌اند. فقط `nextProductNo` و آن هم تنها اگر بزرگ‌تر باشد بالا می‌رود
+     * تا کد کالای تازه با کدهای آمده از فایل دیگر تداخل نکند.
+     */
+    private fun writeSettings(db: SQLiteDatabase, rows: JSONArray?, mode: RestoreMode) {
         if (rows == null) return
         val map = HashMap<String, Any>()
         for (index in 0 until rows.length()) {
@@ -410,6 +435,13 @@ class BackupRepo(
             val key = row.optString("key")
             if (key.isEmpty()) continue
             map[key] = row.opt("value") ?: continue
+        }
+        if (mode == RestoreMode.Merge) {
+            val incoming = (map["nextProductNo"] as? Number)?.toInt() ?: return
+            if (incoming > nextProductNo(db)) {
+                db.update("settings", ContentValues().apply { put("nextProductNo", incoming) }, "id = 1", null)
+            }
+            return
         }
         val values = ContentValues()
         if (map.containsKey("shopName")) values.put("shopName", map["shopName"].toString())

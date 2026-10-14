@@ -11,6 +11,7 @@ class AppContainer(context: Context) {
     val hub: DataHub = DataHub(db)
     val stock: StockRepo = StockRepo(db, hub)
     val products: ProductRepo = ProductRepo(db, hub, stock)
+    val photos: PhotoStore = PhotoStore(db, hub)
     val labels: LabelRepo = LabelRepo(db, hub)
     val settings: SettingsRepo = SettingsRepo(db, hub)
     val backup: BackupRepo = BackupRepo(db, hub, settings, stock)

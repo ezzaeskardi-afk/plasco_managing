@@ -47,6 +47,15 @@ class DataHub(private val helper: PlascoDb) {
     private val _stockTakes = MutableStateFlow<List<StockTake>>(emptyList())
     val stockTakes: StateFlow<List<StockTake>> = _stockTakes.asStateFlow()
 
+    /**
+     * شناسهٔ کالاهای عکس‌دار به زمان آخرین تغییر عکسشان. خودِ بایت‌ها در حافظه
+     * نمی‌مانند (چند هزار عکس یعنی چند صد مگابایت)؛ بندانگشتی‌ها فقط در `PhotoStore`
+     * و به‌اندازهٔ لازم خوانده می‌شوند. این نگاشت برای این است که UI بفهمد عکسِ یک
+     * کالا عوض شده و باید از نو خوانده شود.
+     */
+    private val _photoStamps = MutableStateFlow<Map<ID, Long>>(emptyMap())
+    val photoStamps: StateFlow<Map<ID, Long>> = _photoStamps.asStateFlow()
+
     suspend fun reloadAll() = withContext(Dispatchers.IO) {
         val db = helper.readableDatabase
         _brands.value = readBrands(db)
@@ -57,6 +66,11 @@ class DataHub(private val helper: PlascoDb) {
         _movements.value = readMovements(db)
         _settings.value = readSettings(db)
         _stockTakes.value = readStockTakes(db)
+        _photoStamps.value = readPhotoStamps(db)
+    }
+
+    suspend fun reloadPhotoStamps() = withContext(Dispatchers.IO) {
+        _photoStamps.value = readPhotoStamps(helper.readableDatabase)
     }
 
     suspend fun reloadProducts() = withContext(Dispatchers.IO) {
@@ -124,6 +138,13 @@ class DataHub(private val helper: PlascoDb) {
     private fun readSettings(db: android.database.sqlite.SQLiteDatabase): Settings =
         db.rawQuery("SELECT * FROM settings WHERE id = 1", null).use { cursor ->
             if (cursor.moveToFirst()) cursor.toSettings() else Settings()
+        }
+
+    private fun readPhotoStamps(db: android.database.sqlite.SQLiteDatabase): Map<ID, Long> =
+        db.rawQuery("SELECT productId, updatedAt FROM photos", null).use { cursor ->
+            val rows = LinkedHashMap<ID, Long>()
+            while (cursor.moveToNext()) rows[cursor.getString(0)] = cursor.getLong(1)
+            rows
         }
 
     private fun readStockTakes(db: android.database.sqlite.SQLiteDatabase): List<StockTake> =

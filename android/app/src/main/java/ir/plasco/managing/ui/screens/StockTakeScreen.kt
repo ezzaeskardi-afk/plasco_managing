@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -30,19 +32,23 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
+import ir.plasco.managing.domain.findProductByBarcode
 import ir.plasco.managing.domain.formatJalali
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.parseIntegerInput
 import ir.plasco.managing.model.ID
+import ir.plasco.managing.model.Product
 import ir.plasco.managing.model.StockTakeStatus
 import ir.plasco.managing.ui.Fa
 import ir.plasco.managing.ui.LocalAppContainer
 import ir.plasco.managing.ui.LocalShowMessage
 import ir.plasco.managing.ui.components.ChipRow
 import ir.plasco.managing.ui.components.EmptyState
+import ir.plasco.managing.ui.components.NumberField
 import ir.plasco.managing.ui.components.Panel
 import ir.plasco.managing.ui.components.ScreenHeader
 import ir.plasco.managing.ui.components.SectionTitle
+import ir.plasco.managing.ui.scan.BarcodeScannerDialog
 import kotlinx.coroutines.launch
 
 @Composable
@@ -58,6 +64,9 @@ fun StockTakeScreen(onBack: () -> Unit) {
     var locationId by remember(locations) { mutableStateOf(locations.firstOrNull()?.id.orEmpty()) }
     val counts = remember { mutableStateMapOf<ID, String>() }
     var busy by remember { mutableStateOf(false) }
+    var scanOpen by remember { mutableStateOf(false) }
+    var scanTarget by remember { mutableStateOf<Product?>(null) }
+    var scanCount by remember { mutableStateOf("") }
 
     val active = remember(products) { products.filter { it.active } }
     val atLocation = remember(levels, locationId) {
@@ -72,9 +81,24 @@ fun StockTakeScreen(onBack: () -> Unit) {
         }
     }
 
+    // ثبت شمارش همان کالایی که همین حالا خوانده شد؛ «و بارکد بعدی» دوربین را بازمی‌گرداند.
+    fun saveScan(next: Boolean) {
+        val target = scanTarget ?: return
+        val text = scanCount.trim()
+        if (text.isEmpty()) counts.remove(target.id) else counts[target.id] = text
+        scanTarget = null
+        showMessage(Fa.stocktake.scanned)
+        if (next) scanOpen = true
+    }
+
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
-            ScreenHeader(title = Fa.stocktake.title, subtitle = Fa.stocktake.applyHint, onBack = onBack)
+            ScreenHeader(
+                title = Fa.stocktake.title,
+                subtitle = Fa.stocktake.applyHint,
+                onBack = onBack,
+                action = { OutlinedButton(onClick = { scanOpen = true }) { Text(Fa.scan.button) } },
+            )
         }
 
         item { SectionTitle(Fa.stocktake.location, Modifier.padding(horizontal = 12.dp)) }
@@ -191,5 +215,61 @@ fun StockTakeScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (scanOpen) {
+        BarcodeScannerDialog(
+            onResult = { code ->
+                scanOpen = false
+                val found = findProductByBarcode(active, code)
+                if (found == null) {
+                    showMessage(Fa.scan.notFound + " " + code)
+                } else {
+                    scanTarget = found
+                    scanCount = counts[found.id].orEmpty()
+                }
+            },
+            onDismiss = { scanOpen = false },
+            hint = Fa.stocktake.scanHint,
+        )
+    }
+
+    val target = scanTarget
+    if (target != null) {
+        AlertDialog(
+            onDismissRequest = { scanTarget = null },
+            title = { Text(target.name) },
+            text = {
+                Column {
+                    Text(
+                        "${target.code} · ${Fa.movements.pieces} در این مکان: ${formatNumber(atLocation[target.id] ?: 0)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val before = counts[target.id]
+                    if (!before.isNullOrBlank()) {
+                        Text(
+                            Fa.stocktake.countedBefore.replace("{count}", before),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    NumberField(Fa.stocktake.counted, scanCount, { scanCount = it })
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        OutlinedButton(
+                            onClick = { scanCount = ((parseIntegerInput(scanCount) ?: 0) + 1).toString() },
+                        ) { Text("+۱") }
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(
+                            onClick = { scanCount = maxOf(0, (parseIntegerInput(scanCount) ?: 0) - 1).toString() },
+                        ) { Text("−۱") }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { saveScan(next = false) }) { Text(Fa.common.save) } },
+            dismissButton = { TextButton(onClick = { saveScan(next = true) }) { Text(Fa.stocktake.scanNext) } },
+        )
     }
 }

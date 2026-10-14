@@ -122,6 +122,10 @@ object Fa {
         const val deltaCount = "{count} کالا در این شمارش تغییر می‌کند"
         const val empty = "برای این مکان چیزی برای شمارش نیست."
         const val cancelTake = "لغو شمارش"
+        const val scanHint = "با دوربین بارکد کالا را بخوان تا همین‌جا شمرده شود."
+        const val scanNext = "ثبت و بارکد بعدی"
+        const val scanned = "شمارش ثبت شد"
+        const val countedBefore = "تا حالا شمرده‌شده: {count}"
     }
 
     object more {
@@ -175,6 +179,25 @@ object Fa {
         const val contents = "داخل فایل: {products} کالا، {movements} حرکت"
         const val storageNote = "داده‌ها روی همین گوشی هستند؛ هفته‌ای یک‌بار بکاپ بگیر."
         const val renumbered = "{count} کد کالا تکراری بود و شمارهٔ تازه گرفت."
+    }
+
+    object scan {
+        const val title = "خواندن بارکد"
+        const val button = "بارکد"
+        const val hint = "بارکد را داخل کادر بگیر"
+        const val close = "بستن"
+        const val torch = "چراغ"
+        const val denied = "برای خواندن بارکد، اجازهٔ دوربین لازم است."
+        const val deniedHint = "اگر پنجرهٔ اجازه باز نشد، از تنظیمات گوشی به برنامه اجازهٔ دوربین بده."
+        const val allow = "اجازه دادن"
+        const val appSettings = "تنظیمات گوشی"
+        const val noCamera = "دوربین باز نشد؛ از جست‌وجو یا کد کالا استفاده کن."
+        const val notFound = "کالایی با این بارکد پیدا نشد:"
+        const val added = "بارکد اضافه شد"
+        const val otherProduct = "این بارکد روی «{name}» ثبت شده است."
+        const val codes = "بارکدهای کالا"
+        const val codesHint = "هر بارکد در یک خط یا با ویرگول؛ با دوربین هم می‌شود اضافه کرد"
+        const val addWithCamera = "افزودن بارکد با دوربین"
     }
 
     object errors {

@@ -35,6 +35,7 @@ import ir.plasco.managing.ui.LocalShowMessage
 import ir.plasco.managing.ui.components.ChipRow
 import ir.plasco.managing.ui.components.NumberField
 import ir.plasco.managing.ui.components.Panel
+import ir.plasco.managing.ui.components.PhotoSection
 import ir.plasco.managing.ui.components.ScreenHeader
 import ir.plasco.managing.ui.components.SectionTitle
 import ir.plasco.managing.ui.components.TextField
@@ -69,6 +70,8 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
     var scanOpen by remember { mutableStateOf(false) }
     var brandId by remember(key) { mutableStateOf(existing?.brandId.orEmpty()) }
     var categoryId by remember(key) { mutableStateOf(existing?.categoryId.orEmpty()) }
+    var photoPending by remember(key) { mutableStateOf<ByteArray?>(null) }
+    var photoCleared by remember(key) { mutableStateOf(false) }
     var packsIn by remember { mutableStateOf("") }
     var piecesIn by remember { mutableStateOf("") }
     var locationId by remember(locations) { mutableStateOf(locations.firstOrNull()?.id.orEmpty()) }
@@ -83,9 +86,13 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
         val initial = piecesFrom(parseIntegerInput(packsIn) ?: 0, parseIntegerInput(piecesIn) ?: 0, size)
         busy = true
         scope.launch {
+            // عکس مثل بقیهٔ فیلدها با همین ذخیره می‌نشیند: انتخاب‌شده را می‌نویسد و
+            // «حذف عکس» را هم همان‌جا اعمال می‌کند (رفتار نسخهٔ وب).
+            var savedId: ID? = existing?.id
+            var photoNote: String? = null
             try {
                 if (existing == null) {
-                    container.products.create(
+                    val created = container.products.create(
                         NewProduct(
                             name = name.trim(),
                             code = code.trim().ifEmpty { null },
@@ -103,7 +110,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                             locationId = locationId.ifEmpty { null },
                         ),
                     )
-                    showMessage(Fa.products.saved)
+                    savedId = created.id
                 } else {
                     container.products.update(
                         existing.copy(
@@ -121,8 +128,17 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                             note = note.ifBlank { null },
                         ),
                     )
-                    showMessage(Fa.products.updated)
                 }
+                val pendingBytes = photoPending
+                if (pendingBytes != null && savedId != null) {
+                    photoNote = runCatching { container.photos.setPhoto(savedId, pendingBytes) }
+                        .fold({ Fa.photos.saved }, { Fa.photos.failed })
+                } else if (photoCleared && savedId != null) {
+                    container.photos.deletePhoto(savedId)
+                    photoNote = Fa.photos.deleted
+                }
+                val base = if (existing == null) Fa.products.saved else Fa.products.updated
+                showMessage(base + (photoNote?.let { " · $it" } ?: ""))
                 onDone()
             } catch (error: Throwable) {
                 showMessage(messageFor(error))
@@ -150,6 +166,27 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                 NumberField(Fa.products.buyPrice, buyPrice, { buyPrice = it })
                 Spacer(Modifier.height(8.dp))
                 NumberField(Fa.products.retailPrice, retailPrice, { retailPrice = it })
+            }
+        }
+
+        item { SectionTitle(Fa.photos.title, Modifier.padding(horizontal = 12.dp)) }
+
+        item {
+            Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
+                PhotoSection(
+                    productId = existing?.id,
+                    pending = photoPending,
+                    onPending = { bytes ->
+                        photoPending = bytes
+                        if (bytes != null) photoCleared = false
+                    },
+                    cleared = photoCleared,
+                    onCleared = {
+                        photoPending = null
+                        photoCleared = true
+                    },
+                    onMessage = showMessage,
+                )
             }
         }
 

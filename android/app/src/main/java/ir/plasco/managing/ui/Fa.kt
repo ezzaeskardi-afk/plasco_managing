@@ -72,6 +72,24 @@ object Fa {
         const val minStockHint = "برای هشدار کم‌موجودی؛ خالی بگذار اگر نمی‌خواهی"
     }
 
+    object photos {
+        const val title = "عکس"
+        const val hint = "عکس خودش کوچک می‌شود."
+        const val add = "افزودن عکس"
+        const val remove = "حذف عکس"
+        const val gallery = "انتخاب از گالری"
+        const val camera = "گرفتن عکس"
+        const val chooseBody = "عکس را از گالری انتخاب کن یا با دوربین گوشی بگیر."
+        const val empty = "بدون عکس"
+        const val removeConfirm = "عکس این کالا پاک شود؟"
+        const val pendingHint = "با ذخیرهٔ فرم ثبت می‌شود."
+        const val clearHint = "با ذخیرهٔ فرم پاک می‌شود."
+        const val saved = "عکس ذخیره شد"
+        const val deleted = "عکس پاک شد"
+        const val failed = "این فایل عکس نبود."
+        const val noCamera = "دوربین گوشی باز نشد."
+    }
+
     object movements {
         const val title = "حرکات"
         const val newMovement = "ثبت حرکت"
@@ -163,7 +181,7 @@ object Fa {
     object backup {
         const val title = "بکاپ و بازیابی"
         const val hint =
-            "فایل بکاپ یک ZIP است که همان data.json نسخهٔ وب را دارد؛ پس بکاپ این گوشی را می‌شود در نسخهٔ وب باز کرد و برعکس."
+            "فایل بکاپ یک ZIP است که همان data.json نسخهٔ وب را دارد و عکس‌ها هم داخل همان فایل‌اند؛ پس بکاپ این گوشی را می‌شود در نسخهٔ وب باز کرد و برعکس."
         const val create = "بکاپ گرفتن"
         const val restore = "بازیابی از فایل"
         const val restoreTitle = "این فایل بازیابی شود؟"
@@ -177,7 +195,7 @@ object Fa {
         const val restoredMerge = "ادغام انجام شد"
         const val invalid = "این فایل بکاپ پلاسکو نیست."
         const val fileFailed = "فایل باز نشد."
-        const val contents = "داخل فایل: {products} کالا، {movements} حرکت"
+        const val contents = "داخل فایل: {products} کالا، {photos} عکس، {movements} حرکت"
         const val storageNote = "داده‌ها روی همین گوشی هستند؛ هفته‌ای یک‌بار بکاپ بگیر."
         const val renumbered = "{count} کد کالا تکراری بود و شمارهٔ تازه گرفت."
     }

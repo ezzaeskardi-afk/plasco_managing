@@ -22,8 +22,15 @@ android {
         applicationId = "ir.plasco.managing"
         minSdk = 26
         targetSdk = 37
-        versionCode = 3
-        versionName = "1.1.1"
+        versionCode = 4
+        versionName = "1.2.0"
+
+        // موتور بارکد ML Kit برای هر معماری یک کتابخانهٔ بومی ~۵ مگابایتی دارد
+        // (libbarhopper_v3.so). گوشی‌های مغازه ARM هستند، پس فقط دو معماری واقعی
+        // بسته می‌شود و x86/x86_64 (که فقط به کار شبیه‌ساز می‌آید) بیرون می‌ماند.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
@@ -38,8 +45,18 @@ android {
     }
 
     buildTypes {
+        debug {
+            // شبیه‌ساز آزمایشی این کامپیوتر x86_64 است؛ این فیلتر فقط به ساخت
+            // debug اضافه می‌شود تا نصب و آزمودن روی شبیه‌ساز ممکن بماند.
+            ndk {
+                abiFilters += "x86_64"
+            }
+        }
         release {
-            isMinifyEnabled = false
+            // بدون R8، تقریباً تمام کتابخانه‌های اندرویدیکس و Compose در dex می‌مانند و
+            // فقط dex ۱۲ مگابایت از APK را می‌گرفت (۳۳ مگابایت خام، سه فایل dex).
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")

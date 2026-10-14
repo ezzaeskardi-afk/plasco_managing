@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- تنها پوشه‌ای که برنامه به دوربین گوشی می‌دهد: عکس موقت در حافظهٔ پنهان. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path
+        name="camera"
+        path="camera/" />
+</paths>

@@ -55,6 +55,7 @@ fun DataScreen(onBack: () -> Unit) {
     val settings by container.hub.settings.collectAsStateWithLifecycle()
     val products by container.hub.products.collectAsStateWithLifecycle()
     val movements by container.hub.movements.collectAsStateWithLifecycle()
+    val photoStamps by container.hub.photoStamps.collectAsStateWithLifecycle()
 
     var pending by remember { mutableStateOf<PendingRestore?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -74,7 +75,8 @@ fun DataScreen(onBack: () -> Unit) {
                     stream.use { it.write(bytes) }
                 }
                 lastResult = "${Fa.backup.created} — ${formatNumber(summary.products)} کالا، " +
-                    "${formatNumber(summary.movements)} حرکت، ${formatNumber(summary.bytes / 1024)} کیلوبایت"
+                    "${formatNumber(summary.photos)} عکس، ${formatNumber(summary.movements)} حرکت، " +
+                    "${formatNumber(summary.bytes / 1024)} کیلوبایت"
                 showMessage(Fa.backup.created)
             } catch (error: Throwable) {
                 showMessage(error.message ?: Fa.errors.failed)
@@ -115,7 +117,7 @@ fun DataScreen(onBack: () -> Unit) {
                     val result = container.backup.restore(file.bytes, mode)
                     val base = if (mode == RestoreMode.Replace) Fa.backup.restored else Fa.backup.restoredMerge
                     lastResult = "$base — ${formatNumber(result.products)} کالا، " +
-                        "${formatNumber(result.movements)} حرکت" +
+                        "${formatNumber(result.photos)} عکس، ${formatNumber(result.movements)} حرکت" +
                         if (result.renumbered > 0) {
                             " · " + Fa.backup.renumbered.replace("{count}", formatNumber(result.renumbered))
                         } else {
@@ -143,7 +145,8 @@ fun DataScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "${formatNumber(products.size)} کالا · ${formatNumber(movements.size)} حرکت",
+                    "${formatNumber(products.size)} کالا · ${formatNumber(photoStamps.size)} عکس · " +
+                        "${formatNumber(movements.size)} حرکت",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -188,6 +191,7 @@ fun DataScreen(onBack: () -> Unit) {
                 Text(
                     Fa.backup.contents
                         .replace("{products}", formatNumber(file.info.products))
+                        .replace("{photos}", formatNumber(file.info.photos))
                         .replace("{movements}", formatNumber(file.info.movements)) +
                         "\n\n" + Fa.backup.restoreBody,
                 )

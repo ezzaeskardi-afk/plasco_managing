@@ -22,7 +22,8 @@ class PlascoDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // نسخهٔ ۱ اولین نسخه است؛ تغییر بعدی = نسخهٔ ۲ با مهاجرت جدا.
+        // نسخهٔ ۲ فقط جدول عکس‌ها را اضافه می‌کند؛ بقیهٔ جدول‌ها دست‌نخورده می‌مانند.
+        if (oldVersion < 2) db.execSQL(PHOTOS_TABLE)
     }
 
     /**
@@ -49,7 +50,7 @@ class PlascoDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION
 
     companion object {
         const val NAME = "plasco-managing.db"
-        const val VERSION = 1
+        const val VERSION = 2
 
         /** همان شناسه‌های نسخهٔ وب — وگرنه بازیابی بکاپ، مکان‌ها را دوباره می‌سازد. */
         val DEFAULT_LOCATIONS: List<Pair<String, String>> = listOf(
@@ -63,7 +64,20 @@ class PlascoDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION
         const val DEFAULT_DEVICE_NAME = "دستگاه اصلی"
         const val DEFAULT_DEVICE_PREFIX = "DEV1"
 
+        /**
+         * عکس کالا، همان شکل نسخهٔ وب: برای هر کالا یک عکس ۸۰۰ پیکسلی و یک بندانگشتی
+         * ۱۶۰ پیکسلی. در `data.json` نمی‌آید (بایت است)؛ در ZIP بکاپ به شکل
+         * `photos/<productId>-thumb.jpg` و `-full.jpg` می‌نشیند.
+         */
+        private val PHOTOS_TABLE = """
+            CREATE TABLE photos (
+              productId TEXT PRIMARY KEY, thumb BLOB NOT NULL, full BLOB NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+        """.trimIndent()
+
         private val SCHEMA = listOf(
+            PHOTOS_TABLE,
             """
             CREATE TABLE brands (
               id TEXT PRIMARY KEY, name TEXT NOT NULL, nameN TEXT NOT NULL,
@@ -133,8 +147,7 @@ class PlascoDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION
             )
             """.trimIndent(),
             "CREATE INDEX idx_stockTakeItems_take ON stockTakeItems(stockTakeId, productId)",
-            """
-            CREATE TABLE settings (
+            """            CREATE TABLE settings (
               id INTEGER PRIMARY KEY CHECK (id = 1), shopName TEXT NOT NULL,
               currencyLabel TEXT NOT NULL, textScale REAL NOT NULL, theme TEXT NOT NULL,
               nextProductNo INTEGER NOT NULL, lastBackupAt INTEGER,

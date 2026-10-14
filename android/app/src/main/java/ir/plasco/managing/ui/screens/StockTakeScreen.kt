@@ -178,7 +178,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
 
         item { SectionTitle(Fa.stocktake.history, Modifier.padding(horizontal = 12.dp)) }
         if (stockTakes.isEmpty()) {
-            item { EmptyState(Fa.stocktake.empty) }
+            item { EmptyState(Fa.stocktake.historyEmpty) }
         }
         items(stockTakes, key = { it.id }) { take ->
             Panel(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {

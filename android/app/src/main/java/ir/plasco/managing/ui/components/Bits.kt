@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -160,7 +161,10 @@ fun TextField(
     )
 }
 
-/** چیپ‌های فیلتر که در موبایل افقی می‌لغزند. */
+/**
+ * چیپ‌های فیلتر. روی صفحهٔ باریک به خط بعد می‌روند تا هیچ گزینه‌ای بیرون از کادر نماند
+ * (صفحهٔ ثبت حرکت هفت گزینه دارد و در ۳۶۰ پیکسل جا نمی‌شود).
+ */
 @Composable
 fun ChipRow(
     options: List<Pair<String, String>>,
@@ -168,9 +172,10 @@ fun ChipRow(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    FlowRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         options.forEach { (value, label) ->
             FilterChip(

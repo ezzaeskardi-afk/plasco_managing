@@ -228,7 +228,8 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
         item {
             Column(modifier = Modifier.padding(12.dp)) {
                 Button(onClick = { save() }, enabled = !busy) {
-                    Text(if (existing == null) Fa.common.save else Fa.products.updated)
+                    // برچسب دکمه فعل است؛ «کالا ذخیره شد» پیام بعد از ذخیره‌است، نه دستور.
+                    Text(Fa.common.save)
                 }
                 Spacer(Modifier.height(8.dp))
                 if (existing != null) {

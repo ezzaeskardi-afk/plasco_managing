@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
 private data class LabelRow(val id: ID, val name: String)
 
 @Composable
-fun MoreScreen(onOpenStockTake: () -> Unit) {
+fun MoreScreen(onOpenStockTake: () -> Unit, onOpenData: () -> Unit) {
     val container = LocalAppContainer.current
     val showMessage = LocalShowMessage.current
     val scope = rememberCoroutineScope()
@@ -192,6 +192,8 @@ fun MoreScreen(onOpenStockTake: () -> Unit) {
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onOpenData) { Text(Fa.backup.title) }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onOpenStockTake) { Text(Fa.stocktake.title) }
             }

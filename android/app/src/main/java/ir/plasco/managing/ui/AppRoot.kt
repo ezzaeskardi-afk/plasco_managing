@@ -41,6 +41,7 @@ import androidx.navigation.navArgument
 import androidx.navigation.NavType
 import ir.plasco.managing.data.AppContainer
 import ir.plasco.managing.model.ID
+import ir.plasco.managing.ui.screens.DataScreen
 import ir.plasco.managing.ui.screens.HomeScreen
 import ir.plasco.managing.ui.screens.MoreScreen
 import ir.plasco.managing.ui.screens.MovementScreen
@@ -61,6 +62,7 @@ object Routes {
     const val MovementNew = "movements/new?productId={productId}&type={type}"
     const val StockTake = "stocktake"
     const val More = "more"
+    const val Data = "more/data"
 
     fun productEdit(id: ID) = "products/$id"
 
@@ -182,7 +184,11 @@ fun AppRoot(container: AppContainer) {
                             composable(Routes.More) {
                                 MoreScreen(
                                     onOpenStockTake = { navController.navigate(Routes.StockTake) },
+                                    onOpenData = { navController.navigate(Routes.Data) },
                                 )
+                            }
+                            composable(Routes.Data) {
+                                DataScreen(onBack = { navController.popBackStack() })
                             }
                         }
                     }

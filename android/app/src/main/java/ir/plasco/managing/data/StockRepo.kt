@@ -88,7 +88,7 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
 
     /** بازسازی کامل کش موجودی از روی حرکات (قفسه‌ها حفظ می‌شوند). */
     suspend fun rebuildLevels(): Int {
-        val count = inTransaction { db -> rebuildInside(db) }
+        val count = inTransaction { db -> rebuildLevelsInTransaction(db) }
         hub.reloadStock()
         return count
     }
@@ -193,7 +193,11 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toStockLevel()) } }
     }
 
-    // --- درون تراکنش ---
+    // --- درون تراکنش (بازیابی بکاپ هم از همین دو تابع استفاده می‌کند) ---
+
+    /** تنها نویسندهٔ `stockLevels` همراه با `rebuildLevelsInTransaction`. */
+    internal fun writeMovementInTransaction(db: SQLiteDatabase, input: MovementInput): Movement =
+        writeMovement(db, input)
 
     private fun writeMovement(db: SQLiteDatabase, input: MovementInput): Movement {
         if (input.qty == 0) throw MovementQtyMustBeNonZero()
@@ -283,7 +287,7 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
         note = movement.note,
     )
 
-    private fun rebuildInside(db: SQLiteDatabase): Int {
+    internal fun rebuildLevelsInTransaction(db: SQLiteDatabase): Int {
         val bins = HashMap<Pair<ID, ID>, String?>()
         db.rawQuery("SELECT productId, locationId, bin FROM stockLevels", null).use { cursor ->
             while (cursor.moveToNext()) {

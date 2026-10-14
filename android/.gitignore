@@ -1,0 +1,8 @@
+# خروجی ساخت و فایل‌های مخصوص همین کامپیوتر
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+.cxx/

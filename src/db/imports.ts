@@ -401,6 +401,37 @@ export async function previewImportUndo(
   };
 }
 
+export interface ImportUndoRemainder {
+  batch: ImportBatch;
+  /** Journal rows still waiting to go back. */
+  rows: number;
+}
+
+/**
+ * Batches whose waiting rows would now revert **whole**: a later delivery (or a
+ * stock correction) lifted the block. Read-only, and it only looks at batches a
+ * previous undo already touched (`partialUndoAt`) — a file that was never undone
+ * is offered in the history list, not after every delivery. Newest first.
+ */
+export async function revertibleImportRemainders(
+  target: PlascoDb = defaultDb,
+): Promise<ImportUndoRemainder[]> {
+  const batches = await target.imports.orderBy('createdAt').reverse().limit(HISTORY_LIMIT).toArray();
+  const ready: ImportUndoRemainder[] = [];
+  for (const batch of batches) {
+    if (batch.undoneAt || !batch.partialUndoAt) continue;
+    const entries = await target.importEntries.where('batchId').equals(batch.id).toArray();
+    if (entries.length === 0) continue;
+    const plan = await planImportUndo(entries, target);
+    // Only a remainder that goes back whole counts: a half-of-a-half would just
+    // churn the journal on every small delivery.
+    if (plan.blocked.length > 0) continue;
+    const rows = revertibleRows(plan);
+    if (rows > 0) ready.push({ batch, rows });
+  }
+  return ready;
+}
+
 export interface UndoImportResult {
   batchId: ID;
   /** True when some rows had to stay behind; the batch stays undoable. */

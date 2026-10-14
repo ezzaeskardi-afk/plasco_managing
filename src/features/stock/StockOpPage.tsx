@@ -21,6 +21,7 @@ import { formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
 import { toastError, toastUndo } from '@/lib/toast';
 import { ProductThumb } from '@/features/products/ProductThumb';
+import { suggestImportUndoRemainder } from '@/features/importexport/undoImport';
 
 type Op = 'receive' | 'issue' | 'damage' | 'transfer' | 'adjust';
 
@@ -117,6 +118,10 @@ export function StockOpPage() {
 
   if (!products || !locations) return <p className="text-crate">{fa.common.loading}</p>;
 
+  // Stock coming in can unblock an import that a previous undo had to leave half
+  // done; the shopkeeper gets the offer in the same breath as the movement.
+  const offerRemainderUndo = () => void suggestImportUndoRemainder();
+
   const submit = async () => {
     if (!product) {
       toastError(fa.stock.pickProduct);
@@ -146,6 +151,7 @@ export function StockOpPage() {
           note: note || undefined,
         });
         toastUndo(fa.stock.adjusted, () => undoMovement(movement.id));
+        if (delta > 0) offerRemainderUndo();
       } else if (op === 'transfer') {
         if (qty <= 0) {
           toastError(fa.stock.enterQty);
@@ -159,6 +165,8 @@ export function StockOpPage() {
           note: note || undefined,
         });
         toastUndo(fa.stock.transferred, () => undoMovement(transfer.out.id));
+        // The destination shelf gained pieces, and a block is judged per shelf.
+        offerRemainderUndo();
       } else {
         if (qty <= 0) {
           toastError(fa.stock.enterQty);
@@ -173,6 +181,7 @@ export function StockOpPage() {
           note: note || undefined,
         });
         toastUndo(OP_SUCCESS[op], () => undoMovement(movement.id));
+        if (signed > 0) offerRemainderUndo();
       }
       localStorage.setItem(LAST_LOCATION_KEY, locationId);
       navigate(`/products/${product.id}`);

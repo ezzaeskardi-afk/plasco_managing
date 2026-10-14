@@ -308,6 +308,8 @@ export const fa = {
     undoPartialDone: 'قسمتی برگردانده شد.',
     undoPartialSummary: '{undone} سطر برگشت · {left} سطر مانده ({names})',
     undoRemaining: 'برگرداندن بقیه',
+    undoSuggestTitle: 'بقیهٔ آن فایل حالا برمی‌گردد.',
+    undoSuggestBody: '{count} سطر از «{file}» مانده بود؛ موجودی تازه راهش را باز کرد.',
     undoRowStock: '{name} — {location}: {qty} عدد کم است',
     undoRowHeld: '{name} — {qty} عددش مانده',
     undoRowHeldMovement: '{name} — حرکتی که برنگشته دارد',

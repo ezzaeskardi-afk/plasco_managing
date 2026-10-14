@@ -7,6 +7,7 @@ import {
   listImportBatches,
   previewImportUndo,
   recordImportBatch,
+  revertibleImportRemainders,
   undoImportBatch,
 } from '@/db/imports';
 import { applyMovement } from '@/db/movements';
@@ -299,5 +300,68 @@ describe('import history', () => {
     expect(result.created).toBe(0);
     expect(result.batchId).toBeNull();
     expect(await db.imports.count()).toBe(0);
+  });
+});
+
+describe('revertibleImportRemainders', () => {
+  /** A two-product import with four buckets sold: the undo has to leave the bucket rows. */
+  async function halfUndoneImport(): Promise<{ batchId: ID; bucketId: ID; locationId: ID }> {
+    const locationId = await firstLocationId();
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [
+        { نام: 'سطل', تعداد: '۱۰' },
+        { نام: 'سبد', تعداد: '۵' },
+      ],
+      { name: 'نام', quantity: 'تعداد' },
+      { ...context, defaultLocationId: locationId },
+    );
+    const commit = await commitRows(prepared, { fileName: 'انبار.xlsx' }, db);
+    const batchId = requireBatchId(commit);
+
+    const bucket = (await db.products.toArray()).find((product) => product.name === 'سطل');
+    if (!bucket) throw new Error('expected the imported bucket');
+    await applyMovement({ productId: bucket.id, locationId, type: 'sale', qty: -4 }, db);
+
+    const outcome = await undoImportBatch(batchId, db);
+    expect(outcome.partial).toBe(true);
+    return { batchId, bucketId: bucket.id, locationId };
+  }
+
+  it('offers nothing for a fresh import or for one that is still stuck', async () => {
+    // A file nobody tried to undo yet belongs in the history list, not in a toast: the
+    // shopkeeper must not be asked to revert the delivery they just typed in.
+    const locationId = await firstLocationId();
+    const context = await buildContext(db);
+    const fresh = prepareRows([{ نام: 'لیوان', تعداد: '۳' }], { name: 'نام', quantity: 'تعداد' }, {
+      ...context,
+      defaultLocationId: locationId,
+    });
+    await commitRows(fresh, { fileName: 'تازه.xlsx' }, db);
+    expect(await revertibleImportRemainders(db)).toEqual([]);
+
+    const { batchId } = await halfUndoneImport();
+    // The bucket rows wait: the shelf is four pieces short of what they need.
+    expect(await revertibleImportRemainders(db)).toEqual([]);
+    expect((await db.imports.get(batchId))?.partialUndoAt).toBeTruthy();
+  });
+
+  it('hands the remainder over once a delivery lifts the block', async () => {
+    const { batchId, bucketId, locationId } = await halfUndoneImport();
+
+    // The delivery the shopkeeper just recorded: four buckets arrive.
+    await applyMovement({ productId: bucketId, locationId, type: 'receive', qty: 4 }, db);
+
+    const ready = await revertibleImportRemainders(db);
+    expect(ready).toHaveLength(1);
+    // The two rows that stayed behind: the bucket's movement and its product row.
+    expect(ready[0]?.rows).toBe(2);
+    expect(ready[0]?.batch.id).toBe(batchId);
+    expect(ready[0]?.batch.fileName).toBe('انبار.xlsx');
+
+    const finished = await undoImportBatch(batchId, db);
+    expect(finished.partial).toBe(false);
+    // Nothing is left to offer once the remainder went back too.
+    expect(await revertibleImportRemainders(db)).toEqual([]);
   });
 });

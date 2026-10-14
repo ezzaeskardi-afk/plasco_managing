@@ -18,6 +18,8 @@ import { useSettings } from '@/app/settings-context';
 import { formatJalali, formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
 import { cn } from '@/lib/utils';
+import { SiteQrCode } from './SiteQrCode';
+import { SITE_URL } from './installQr';
 
 type Tone = 'ok' | 'low' | 'out';
 
@@ -183,7 +185,18 @@ export function StatusPage() {
           hint={backupStale ? fa.status.backupStale : fa.status.backupFresh}
           tone={backupStale ? 'low' : 'ok'}
         />
-        <Line label={fa.status.install} value={installInfo.value} hint={installInfo.hint} tone={installInfo.tone} />
+        <Line label={fa.status.install} value={installInfo.value} hint={installInfo.hint} tone={installInfo.tone}>
+          <div className="mt-3 flex items-start gap-3">
+            <SiteQrCode className="size-[9rem] shrink-0 rounded-input border border-line bg-white p-1" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[0.9rem] text-ink">{fa.settings.installQrTitle}</p>
+              <p className="mt-1 text-[0.8rem] text-crate">{fa.settings.installQrHint}</p>
+              <p dir="ltr" className="mt-1 select-all break-all text-[0.8rem] text-basin">
+                {SITE_URL}
+              </p>
+            </div>
+          </div>
+        </Line>
       </Panel>
     </div>
   );

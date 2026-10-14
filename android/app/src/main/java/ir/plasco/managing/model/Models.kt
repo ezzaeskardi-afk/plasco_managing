@@ -137,8 +137,9 @@ data class Settings(
     val nextProductNo: Int = 1,
     val lastBackupAt: Long? = null,
     val costLockEnabled: Boolean = false,
-    val deviceName: String = "",
-    val devicePrefix: String = "",
+    // همان پیش‌فرض‌های نسخهٔ وب (DEFAULT_SETTINGS)
+    val deviceName: String = "دستگاه اصلی",
+    val devicePrefix: String = "DEV1",
 )
 
 enum class StockState { Ok, Low, Out }

@@ -43,6 +43,7 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
             if (!input.code.isNullOrBlank() && codeExists(db, code)) {
                 throw IllegalArgumentException("DuplicateProductCode")
             }
+            // قیمت‌ها و تعداد بسته مثل نسخهٔ وب محدود می‌شوند.
             val created = Product(
                 id = newId(),
                 code = code,
@@ -52,11 +53,11 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
                 categoryId = input.categoryId,
                 barcodes = input.barcodes.filter { it.isNotBlank() },
                 packLabel = input.packLabel.ifBlank { "عدد" },
-                packSize = if (input.packSize >= 1) input.packSize else 1,
-                buyPrice = input.buyPrice,
-                retailPrice = input.retailPrice,
-                wholesalePrice = input.wholesalePrice,
-                minStock = input.minStock,
+                packSize = maxOf(1, input.packSize),
+                buyPrice = maxOf(0, input.buyPrice),
+                retailPrice = maxOf(0, input.retailPrice),
+                wholesalePrice = input.wholesalePrice?.let { maxOf(0, it) },
+                minStock = input.minStock?.let { maxOf(0, it) },
                 note = input.note,
                 active = true,
                 createdAt = now,
@@ -83,7 +84,16 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
                 .use { cursor -> if (cursor.moveToFirst()) cursor.toProduct() else null }
         } ?: throw IllegalArgumentException("ProductNotFound")
 
-        val updated = product.copy(nameN = normalizeFa(product.name), updatedAt = now)
+        // همان محدودیت‌های نسخهٔ وب: قیمت منفی نداریم و بسته حداقل یکی است.
+        val updated = product.copy(
+            nameN = normalizeFa(product.name),
+            updatedAt = now,
+            packSize = maxOf(1, product.packSize),
+            buyPrice = maxOf(0, product.buyPrice),
+            retailPrice = maxOf(0, product.retailPrice),
+            wholesalePrice = product.wholesalePrice?.let { maxOf(0, it) },
+            minStock = product.minStock?.let { maxOf(0, it) },
+        )
         inTransaction { db ->
             db.update("products", updated.toValues(), "id = ?", arrayOf(updated.id))
             for ((field, oldValue, newValue) in diffPrices(before, updated)) {
@@ -144,31 +154,20 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toPriceChange()) } }
     }
 
-    private fun writeInitialMovement(db: SQLiteDatabase, productId: ID, locationId: ID, qty: Int, now: Long) {
-        db.insertOrThrow(
-            "movements",
-            null,
-            ContentValues().apply {
-                put("id", newId())
-                put("productId", productId)
-                put("locationId", locationId)
-                put("type", MovementType.Initial.wire)
-                put("qty", qty)
-                put("at", now)
-                put("createdAt", now)
-                put("updatedAt", now)
-            },
-        )
-        db.insertWithOnConflict(
-            "stockLevels",
-            null,
-            ContentValues().apply {
-                put("productId", productId)
-                put("locationId", locationId)
-                put("qty", qty)
-                put("updatedAt", now)
-            },
-            SQLiteDatabase.CONFLICT_REPLACE,
+    /**
+     * موجودی اولیه هم از راه موتور حرکات می‌رود، نه با نوشتن مستقیم روی
+     * `stockLevels` — همان قانون نسخهٔ وب (فقط یک نویسندهٔ موجودی).
+     */
+    private fun writeInitialMovement(db: SQLiteDatabase, productId: ID, locationId: ID, qty: Int, at: Long) {
+        stock.writeMovementInTransaction(
+            db,
+            MovementInput(
+                productId = productId,
+                locationId = locationId,
+                type = MovementType.Initial,
+                qty = qty,
+                at = at,
+            ),
         )
     }
 

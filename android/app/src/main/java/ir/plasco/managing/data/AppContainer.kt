@@ -13,6 +13,7 @@ class AppContainer(context: Context) {
     val products: ProductRepo = ProductRepo(db, hub, stock)
     val labels: LabelRepo = LabelRepo(db, hub)
     val settings: SettingsRepo = SettingsRepo(db, hub)
+    val backup: BackupRepo = BackupRepo(db, hub, settings, stock)
 
     /** یک بار در شروع برنامه؛ جدول‌ها ساخته و همه‌چیز خوانده می‌شود. */
     suspend fun boot() {

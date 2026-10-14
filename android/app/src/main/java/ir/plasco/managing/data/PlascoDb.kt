@@ -25,20 +25,25 @@ class PlascoDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION
         // نسخهٔ ۱ اولین نسخه است؛ تغییر بعدی = نسخهٔ ۲ با مهاجرت جدا.
     }
 
-    /** سه مکان پیش‌فرض و ردیف تنظیمات (همان کاری که `db.on('populate')` می‌کرد). */
+    /**
+     * سه مکان پیش‌فرض و ردیف تنظیمات — عیناً همان پیش‌فرض‌های نسخهٔ وب
+     * (`DEFAULT_LOCATIONS` / `DEFAULT_SETTINGS` در src/db/dexie.ts)، چون بکاپ
+     * دو نسخه باید روی هم بنشیند: شناسهٔ مکان‌ها باید یکی باشد.
+     */
     private fun seed(db: SQLiteDatabase) {
         val now = System.currentTimeMillis()
-        listOf("مغازه", "انبار", "زیرزمین").forEachIndexed { index, name ->
+        DEFAULT_LOCATIONS.forEachIndexed { index, (id, name) ->
             db.execSQL(
                 "INSERT OR IGNORE INTO locations (id, name, sort, createdAt, updatedAt, deletedAt) " +
                     "VALUES (?, ?, ?, ?, ?, NULL)",
-                arrayOf<Any?>(defaultLocationId(index), name, index + 1, now, now),
+                arrayOf<Any?>(id, name, index, now, now),
             )
         }
         db.execSQL(
             "INSERT OR IGNORE INTO settings (id, shopName, currencyLabel, textScale, theme, " +
                 "nextProductNo, lastBackupAt, costLockEnabled, deviceName, devicePrefix) " +
-                "VALUES (1, 'پلاسکو منیجینگ', 'تومان', 1, 'system', 1, NULL, 0, '', '')",
+                "VALUES (1, ?, ?, 1, 'system', 1, NULL, 0, ?, ?)",
+            arrayOf<Any?>(DEFAULT_SHOP_NAME, DEFAULT_CURRENCY_LABEL, DEFAULT_DEVICE_NAME, DEFAULT_DEVICE_PREFIX),
         )
     }
 
@@ -46,8 +51,17 @@ class PlascoDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION
         const val NAME = "plasco-managing.db"
         const val VERSION = 1
 
-        /** شناسهٔ ثابت مکان‌های پیش‌فرض تا با بکاپ نسخهٔ وب هم‌خوان بماند. */
-        fun defaultLocationId(index: Int): String = "loc-${index + 1}"
+        /** همان شناسه‌های نسخهٔ وب — وگرنه بازیابی بکاپ، مکان‌ها را دوباره می‌سازد. */
+        val DEFAULT_LOCATIONS: List<Pair<String, String>> = listOf(
+            "loc-shop" to "مغازه",
+            "loc-warehouse" to "انبار",
+            "loc-basement" to "زیرزمین",
+        )
+
+        const val DEFAULT_SHOP_NAME = "پلاسکو منیجینگ"
+        const val DEFAULT_CURRENCY_LABEL = "تومان"
+        const val DEFAULT_DEVICE_NAME = "دستگاه اصلی"
+        const val DEFAULT_DEVICE_PREFIX = "DEV1"
 
         private val SCHEMA = listOf(
             """

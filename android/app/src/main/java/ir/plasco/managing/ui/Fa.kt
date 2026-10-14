@@ -121,6 +121,7 @@ object Fa {
         const val history = "شمارش‌های گذشته"
         const val deltaCount = "{count} کالا در این شمارش تغییر می‌کند"
         const val empty = "برای این مکان چیزی برای شمارش نیست."
+        const val historyEmpty = "هنوز شمارشی ثبت نشده."
         const val cancelTake = "لغو شمارش"
         const val scanHint = "با دوربین بارکد کالا را بخوان تا همین‌جا شمرده شود."
         const val scanNext = "ثبت و بارکد بعدی"

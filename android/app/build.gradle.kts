@@ -22,8 +22,8 @@ android {
         applicationId = "ir.plasco.managing"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     signingConfigs {
@@ -75,6 +75,18 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.coroutines.android)
+
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.barcode.scanning) {
+        // ML Kit یک تکهٔ تشخیصی (Clearcut) دارد که همان `transport-backend-cct` است:
+        // مجوز INTERNET را به برنامه می‌آورد و لاگ‌هایش را به گوگل می‌فرستد. برنامهٔ مغازه
+        // هیچ چیز بیرونی نمی‌خواهد (AGENTS.md بخش ۹: بدون تلمتری)، پس این تکه کنار گذاشته
+        // می‌شود؛ مدل بارکد همان‌جاست (assets/mlkit_barcode_models) و آفلاین کار می‌کند.
+        exclude(group = "com.google.android.datatransport", module = "transport-backend-cct")
+    }
 
     testImplementation(libs.junit)
 }

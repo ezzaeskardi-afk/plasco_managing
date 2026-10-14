@@ -3,12 +3,14 @@ package ir.plasco.managing.ui.screens
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,6 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.plasco.managing.data.NewProduct
+import ir.plasco.managing.domain.findProductByBarcode
+import ir.plasco.managing.domain.normalizeBarcode
+import ir.plasco.managing.domain.parseBarcodeList
 import ir.plasco.managing.domain.parseIntegerInput
 import ir.plasco.managing.domain.piecesFrom
 import ir.plasco.managing.model.ID
@@ -33,6 +38,7 @@ import ir.plasco.managing.ui.components.Panel
 import ir.plasco.managing.ui.components.ScreenHeader
 import ir.plasco.managing.ui.components.SectionTitle
 import ir.plasco.managing.ui.components.TextField
+import ir.plasco.managing.ui.scan.BarcodeScannerDialog
 import ir.plasco.managing.ui.theme.toneColor
 import ir.plasco.managing.model.StockState
 import kotlinx.coroutines.launch
@@ -59,6 +65,8 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
     var packSize by remember(key) { mutableStateOf(existing?.packSize?.toString() ?: "1") }
     var minStock by remember(key) { mutableStateOf(existing?.minStock?.toString().orEmpty()) }
     var note by remember(key) { mutableStateOf(existing?.note.orEmpty()) }
+    var barcodes by remember(key) { mutableStateOf(existing?.barcodes?.joinToString("\n").orEmpty()) }
+    var scanOpen by remember { mutableStateOf(false) }
     var brandId by remember(key) { mutableStateOf(existing?.brandId.orEmpty()) }
     var categoryId by remember(key) { mutableStateOf(existing?.categoryId.orEmpty()) }
     var packsIn by remember { mutableStateOf("") }
@@ -83,6 +91,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                             code = code.trim().ifEmpty { null },
                             brandId = brandId.ifEmpty { null },
                             categoryId = categoryId.ifEmpty { null },
+                            barcodes = parseBarcodeList(barcodes),
                             packLabel = packLabel.ifBlank { "عدد" },
                             packSize = size,
                             buyPrice = parseIntegerInput(buyPrice) ?: 0,
@@ -102,6 +111,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                             code = code.trim().ifEmpty { existing.code },
                             brandId = brandId.ifEmpty { null },
                             categoryId = categoryId.ifEmpty { null },
+                            barcodes = parseBarcodeList(barcodes),
                             packLabel = packLabel.ifBlank { "عدد" },
                             packSize = size,
                             buyPrice = parseIntegerInput(buyPrice) ?: 0,
@@ -154,6 +164,18 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                 NumberField(Fa.products.packSize, packSize, { packSize = it })
                 Spacer(Modifier.height(8.dp))
                 NumberField(Fa.products.minStock, minStock, { minStock = it }, supporting = Fa.products.minStockHint)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = barcodes,
+                    onValueChange = { barcodes = it },
+                    label = { Text(Fa.scan.codes) },
+                    supportingText = { Text(Fa.scan.codesHint) },
+                    minLines = 2,
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { scanOpen = true }) { Text(Fa.scan.addWithCamera) }
                 Spacer(Modifier.height(8.dp))
                 TextField(Fa.products.note, note, { note = it })
             }
@@ -235,6 +257,30 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                 }
             }
         }
+    }
+
+    // بارکد خوانده‌شده به همین فهرست اضافه می‌شود و با ذخیرهٔ فرم می‌ماند.
+    if (scanOpen) {
+        BarcodeScannerDialog(
+            onResult = { raw ->
+                scanOpen = false
+                val code = normalizeBarcode(raw)
+                val owner = if (code.isEmpty()) {
+                    null
+                } else {
+                    findProductByBarcode(products.filter { it.id != existing?.id }, code)
+                }
+                when {
+                    code.isEmpty() -> showMessage(Fa.scan.notFound)
+                    owner != null -> showMessage(Fa.scan.otherProduct.replace("{name}", owner.name))
+                    else -> {
+                        barcodes = (parseBarcodeList(barcodes) + code).distinct().joinToString("\n")
+                        showMessage(Fa.scan.added)
+                    }
+                }
+            },
+            onDismiss = { scanOpen = false },
+        )
     }
 }
 

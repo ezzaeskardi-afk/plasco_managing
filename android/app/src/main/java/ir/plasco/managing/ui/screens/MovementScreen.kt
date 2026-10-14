@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.plasco.managing.data.MovementInput
+import ir.plasco.managing.domain.findProductByBarcode
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.parseIntegerInput
 import ir.plasco.managing.domain.piecesFrom
@@ -42,6 +43,7 @@ import ir.plasco.managing.ui.components.ProductRow
 import ir.plasco.managing.ui.components.ScreenHeader
 import ir.plasco.managing.ui.components.SectionTitle
 import ir.plasco.managing.ui.components.TextField
+import ir.plasco.managing.ui.scan.BarcodeScannerDialog
 import kotlinx.coroutines.launch
 
 /** کارهایی که کاربر از این صفحه می‌خواهد؛ انتقال دو ساق دارد. */
@@ -80,6 +82,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     var note by remember { mutableStateOf("") }
     var decrease by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var scanOpen by remember { mutableStateOf(false) }
 
     val selected = products.firstOrNull { it.id == productId }
     val brandNames = remember(brands) { brands.associate { it.id to it.name } }
@@ -134,7 +137,12 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
-            ScreenHeader(title = Fa.movements.newMovement, subtitle = action.label, onBack = onDone)
+            ScreenHeader(
+                title = Fa.movements.newMovement,
+                subtitle = action.label,
+                onBack = onDone,
+                action = { OutlinedButton(onClick = { scanOpen = true }) { Text(Fa.scan.button) } },
+            )
         }
 
         item {
@@ -253,5 +261,22 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                 }
             }
         }
+    }
+
+    if (scanOpen) {
+        BarcodeScannerDialog(
+            onResult = { code ->
+                scanOpen = false
+                val found = findProductByBarcode(products, code)
+                if (found == null) {
+                    showMessage(Fa.scan.notFound + " " + code)
+                } else {
+                    productId = found.id
+                    query = ""
+                    showMessage(found.name)
+                }
+            },
+            onDismiss = { scanOpen = false },
+        )
     }
 }

@@ -40,7 +40,7 @@ fun searchProducts(
     val hits = mutableListOf<SearchHit>()
     for (product in products) {
         var score = -1
-        if (product.code.lowercase() == normalizedQuery ||
+        if (normalizeFa(product.code) == normalizedQuery ||
             product.barcodes.any { normalizeFa(it) == normalizedQuery }
         ) {
             score = 100

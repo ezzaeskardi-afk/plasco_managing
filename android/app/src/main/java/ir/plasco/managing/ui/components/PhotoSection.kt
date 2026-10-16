@@ -1,6 +1,8 @@
 package ir.plasco.managing.ui.components
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,6 +42,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import ir.plasco.managing.data.PhotoCodec
 import ir.plasco.managing.model.ID
@@ -72,6 +75,7 @@ fun PhotoSection(
     var chooserOpen by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     var cameraFile by remember { mutableStateOf<File?>(null) }
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var pendingPreview by remember(pending) { mutableStateOf<Bitmap?>(null) }
 
     LaunchedEffect(pending) {
@@ -106,6 +110,25 @@ fun PhotoSection(
             }
         } else {
             file?.delete()
+        }
+    }
+
+    // برنامه مجوز CAMERA را اعلام می‌کند؛ بعضی گوشی‌ها اگر مجوز تا لحظهٔ فراخوانی
+    // دوربین داده نشده باشد SecurityException می‌دهند. پس اول اجازه می‌گیریم و
+    // بعد دوربین را باز می‌کنیم (اجازه یک بار گرفته می‌شود و بعد از آن فوری است).
+    val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val uri = pendingCameraUri
+        pendingCameraUri = null
+        if (granted && uri != null) {
+            if (runCatching { camera.launch(uri) }.isFailure) {
+                cameraFile?.delete()
+                cameraFile = null
+                onMessage(Fa.photos.noCamera)
+            }
+        } else {
+            cameraFile?.delete()
+            cameraFile = null
+            if (!granted) onMessage(Fa.photos.cameraDenied)
         }
     }
 
@@ -189,7 +212,18 @@ fun PhotoSection(
                     val file = newCameraFile(context)
                     cameraFile = file
                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                    if (runCatching { camera.launch(uri) }.isFailure) onMessage(Fa.photos.noCamera)
+                    val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                        PackageManager.PERMISSION_GRANTED
+                    if (granted) {
+                        if (runCatching { camera.launch(uri) }.isFailure) {
+                            file.delete()
+                            cameraFile = null
+                            onMessage(Fa.photos.noCamera)
+                        }
+                    } else {
+                        pendingCameraUri = uri
+                        askCamera.launch(Manifest.permission.CAMERA)
+                    }
                 }) { Text(Fa.photos.camera) }
             },
         )

@@ -214,7 +214,8 @@ private fun BottomBar(navController: NavHostController, route: String?) {
                 selected = selected,
                 onClick = {
                     if (tab.route == Routes.MovementNew) {
-                        navController.navigate(Routes.movementNew())
+                        // تپ‌های پیاپی «＋» نباید چند فرم خالی روی هم بچیند.
+                        navController.navigate(Routes.movementNew()) { launchSingleTop = true }
                     } else {
                         navController.navigate(tab.route) {
                             popUpTo(Routes.Home) { inclusive = tab.route == Routes.Home }

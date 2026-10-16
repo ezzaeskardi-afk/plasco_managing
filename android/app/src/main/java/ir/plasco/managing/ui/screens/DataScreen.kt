@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.plasco.managing.data.BackupInvalidException
 import ir.plasco.managing.data.RestoreMode
 import ir.plasco.managing.data.RestoreSummary
 import ir.plasco.managing.domain.formatJalali
@@ -100,7 +101,7 @@ fun DataScreen(onBack: () -> Unit) {
                 }
                 pending = PendingRestore(bytes, container.backup.inspect(bytes))
             } catch (error: Throwable) {
-                showMessage(Fa.backup.invalid)
+                showMessage(restoreErrorText(error))
             } finally {
                 busy = false
             }
@@ -125,7 +126,7 @@ fun DataScreen(onBack: () -> Unit) {
                         }
                     showMessage(base)
                 } catch (error: Throwable) {
-                    showMessage(Fa.backup.invalid)
+                    showMessage(restoreErrorText(error))
                 } finally {
                     busy = false
                 }
@@ -210,4 +211,19 @@ fun DataScreen(onBack: () -> Unit) {
 private fun suggestedFileName(): String {
     val stamp = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
     return "plasco-backup-$stamp.zip"
+}
+
+/**
+ * پیام خطای بازیابی: «BackupInvalidException» علت را داخل detail دارد؛
+ * فایل جدیدتر باید پیام خودش را بدهد (مثل backupNewer نسخهٔ وب) و خطای
+ * خواندن فایل هم دیگر قاطی «فایل بکاپ نیست» نمی‌شود.
+ */
+private fun restoreErrorText(error: Throwable): String = when {
+    error is BackupInvalidException ->
+        if (error.detail?.startsWith("schema-newer:") == true) {
+            Fa.backup.newerFile.replace("{version}", error.detail.substringAfter("schema-newer:"))
+        } else {
+            Fa.backup.invalid
+        }
+    else -> error.message ?: Fa.errors.failed
 }

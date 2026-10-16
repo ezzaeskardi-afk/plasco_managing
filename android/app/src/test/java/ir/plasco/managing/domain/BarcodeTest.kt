@@ -55,6 +55,15 @@ class BarcodeTest {
     }
 
     @Test
+    fun `numeric product code matches the other leading zero form`() {
+        // کد ذخیره‌شدهٔ ۱۳ رقمی باید با خواندن ۱۲ رقمی پیدا شود و برعکس.
+        val thirteen = listOf(product("p1", "0600123456789"))
+        assertEquals("p1", findProductByBarcode(thirteen, "600123456789")?.id)
+        val twelve = listOf(product("p2", "600123456789"))
+        assertEquals("p2", findProductByBarcode(twelve, "0600123456789")?.id)
+    }
+
+    @Test
     fun `code of the product counts as a barcode`() {
         val products = listOf(product("p1", "P-00042"))
         assertEquals("p1", findProductByBarcode(products, "p-00042")?.id)

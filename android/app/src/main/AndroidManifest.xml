@@ -10,18 +10,25 @@
         android:name="android.hardware.camera.autofocus"
         android:required="false" />
 
+    <!--
+        بکاپ ابری گوگل خاموش است: دادهٔ مغازه باید روی خود گوشی بماند و راه بکاپ
+        همان فایل ZIP خود برنامه است (بخش ۹ شیوه‌نامه). با allowBackup روشن،
+        اندروید دیتابیس کامل فروشگاه را در حساب گوگل کاربر کپی می‌کرد.
+    -->
     <application
         android:name=".PlascoApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Plasco">
 
         <!--
-            عکس کالا با دوربین خود گوشی گرفته می‌شود؛ برنامه فقط جای فایل را به‌صورت
-            محتوایی می‌دهد، پس نه مجوز ذخیره‌سازی لازم است و نه مجوز دوربین (خودِ
-            برنامهٔ دوربین گوشی عکس را می‌گیرد).
+            عکس کالا با دوربین خود گوشی گرفته می‌شود و برنامه فقط جای فایل را از راه
+            FileProvider می‌دهد، پس مجوز ذخیره‌سازی لازم نیست. چون برنامه مجوز
+            CAMERA را (برای بارکدخوان) اعلام کرده، بعضی گوشی‌ها تا وقتی این مجوز
+            داده نشده باشد هنگام فراخوانی دوربین خطا می‌دهند؛ برای همین فرم عکس هم
+            اول همان مجوز را می‌گیرد و بعد دوربین را باز می‌کند.
         -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -8,6 +8,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +69,9 @@ private val PlascoTypography = Typography(
 /** رنگ میله‌های پشتهٔ موجودی. هرگز تنها حامل معنا نیست؛ عدد همیشه کنارش است. */
 @Composable
 fun toneColor(state: StockState): Color {
-    val dark = isSystemInDarkTheme()
+    // تمِ خودِ برنامه ملاک است (مطابق گوشی / روشن / تیره)، نه فقط تنظیم سیستم؛
+    // وگرنه با تم دستی روشن روی گوشیِ تیره، پالت اشتباه و کم‌کنتراست می‌شد.
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     return when (state) {
         StockState.Ok -> if (dark) Color(0xFF9DB0BB) else Color(0xFF51626E)
         StockState.Low -> if (dark) Color(0xFFF0A04B) else Color(0xFFB45309)

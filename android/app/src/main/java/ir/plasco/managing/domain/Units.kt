@@ -17,14 +17,3 @@ fun splitPieces(total: Int, packSize: Int): PacksAndPieces {
     val abs = if (total < 0) -total else total
     return PacksAndPieces(sign * (abs / size), sign * (abs % size))
 }
-
-/** متن کوتاه تعداد، مثلاً «۳ کارتن + ۴». */
-fun describePieces(total: Int, packSize: Int, packLabel: String): String {
-    if (packSize <= 1) return total.toString()
-    val (packs, pieces) = splitPieces(total, packSize)
-    return when {
-        packs == 0 -> pieces.toString()
-        pieces == 0 -> "$packs $packLabel"
-        else -> "$packs $packLabel + $pieces"
-    }
-}

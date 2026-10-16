@@ -34,14 +34,15 @@ object Fa {
     object home {
         const val title = "خانه"
         const val pieces = "تعداد کل"
-        const val sku = "قلم کالا"
+        const val sku = "چند نوع کالا"
         const val costValue = "ارزش خرید"
         const val retailValue = "ارزش فروش"
-        const val potentialProfit = "سود بالقوه"
+        const val potentialProfit = "سود تخمینی"
         const val lowTitle = "کم‌موجود"
         const val outTitle = "ناموجود"
-        const val allGood = "همه‌چیز مرتب است."
-        const val backupReminder = "بیش از ۷ روز است بکاپ نگرفته‌ای."
+        const val lowEmpty = "هیچ کالایی کم نیست."
+        const val outEmpty = "هیچ کالایی تمام نشده."
+        const val backupReminder = "بیش از ۷ روز است که بکاپ نگرفته‌ای."
         const val byLocation = "موجودی هر مکان"
     }
 
@@ -65,6 +66,7 @@ object Fa {
         const val saved = "کالا ثبت شد"
         const val updated = "کالا ذخیره شد"
         const val deleted = "کالا حذف شد"
+        const val deleteConfirm = "«{name}» حذف شود؟"
         const val empty = "هنوز کالایی ثبت نشده."
         const val noResult = "چیزی پیدا نشد."
         const val total = "موجودی"
@@ -88,6 +90,7 @@ object Fa {
         const val deleted = "عکس پاک شد"
         const val failed = "این فایل عکس نبود."
         const val noCamera = "دوربین گوشی باز نشد."
+        const val cameraDenied = "برای گرفتن عکس، اجازهٔ دوربین لازم است."
     }
 
     object movements {
@@ -145,6 +148,7 @@ object Fa {
         const val scanNext = "ثبت و بارکد بعدی"
         const val scanned = "شمارش ثبت شد"
         const val countedBefore = "تا حالا شمرده‌شده: {count}"
+        const val nothingCounted = "چیزی شمرده نشده."
     }
 
     object more {
@@ -195,6 +199,8 @@ object Fa {
         const val restoredMerge = "ادغام انجام شد"
         const val invalid = "این فایل بکاپ پلاسکو نیست."
         const val fileFailed = "فایل باز نشد."
+        const val newerFile =
+            "این بکاپ از خودِ برنامه جدیدتر است (نسخهٔ {version}). اول برنامه را روی همهٔ دستگاه‌ها به‌روز کن، بعد این فایل را برگردان."
         const val contents = "داخل فایل: {products} کالا، {photos} عکس، {movements} حرکت"
         const val storageNote = "داده‌ها روی همین گوشی هستند؛ هفته‌ای یک‌بار بکاپ بگیر."
         const val renumbered = "{count} کد کالا تکراری بود و شمارهٔ تازه گرفت."

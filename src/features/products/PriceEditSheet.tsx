@@ -7,6 +7,7 @@ import type { Product } from '@/db/types';
 import { parseIntegerInput } from '@/domain/numbers';
 import { fa } from '@/i18n/fa';
 import { toastError, toastUndo } from '@/lib/toast';
+import { useSettings } from '@/app/settings-context';
 
 /**
  * Prices change far more often than anything else in the shop, so they get their own
@@ -16,6 +17,7 @@ import { toastError, toastUndo } from '@/lib/toast';
  * Mount it with `key={product.id}` so switching rows never keeps a stale draft.
  */
 export function PriceEditSheet({ product, onClose }: { product: Product; onClose: () => void }) {
+  const { costVisible } = useSettings();
   const [buy, setBuy] = useState(String(product.buyPrice));
   const [retail, setRetail] = useState(String(product.retailPrice));
   const [wholesale, setWholesale] = useState(
@@ -72,7 +74,11 @@ export function PriceEditSheet({ product, onClose }: { product: Product; onClose
       <SheetContent title={fa.products.priceEdit}>
         <p className="mb-4 truncate text-[0.9rem] text-crate">{product.name}</p>
 
-        <NumberField id="quick-buy" label={fa.products.buyPrice} value={buy} onChange={setBuy} />
+        {/* With the cost lock on, the sheet edits retail/wholesale only; the
+            hidden buy value is resubmitted unchanged so nothing is lost. */}
+        {costVisible ? (
+          <NumberField id="quick-buy" label={fa.products.buyPrice} value={buy} onChange={setBuy} />
+        ) : null}
         <NumberField
           id="quick-retail"
           label={fa.products.retailPrice}

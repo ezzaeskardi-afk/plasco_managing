@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { strToU8, zipSync } from 'fflate';
 import { SCHEMA_VERSION } from '@/app/version';
 import { createBackup, readBackup, restoreBackup, BackupInvalidError } from './backup';
 import { PlascoDb } from './dexie';
@@ -126,6 +127,70 @@ describe('backup and restore', () => {
     } finally {
       await other.delete();
     }
+  });
+
+  it('drops the import journal when replace swaps the dataset but merge keeps it', async () => {
+    const product = await seedCatalogue(db);
+    await db.imports.add({
+      id: 'batch-1',
+      fileName: 'لیست.xlsx',
+      created: 1,
+      updated: 1,
+      movements: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    await db.importEntries.add({
+      id: 'entry-1',
+      batchId: 'batch-1',
+      kind: 'product-created',
+      productId: product.id,
+    });
+
+    const { blob } = await createBackup(db);
+
+    // Merge is additive: the device's own undo journal must survive.
+    await restoreBackup(blob, 'merge', db);
+    expect(await db.imports.count()).toBe(1);
+    expect(await db.importEntries.count()).toBe(1);
+
+    // Replace deletes the outgoing dataset, so its undo journal goes with it —
+    // a surviving product-updated entry could otherwise rewrite prices later.
+    await restoreBackup(blob, 'replace', db);
+    expect(await db.imports.count()).toBe(0);
+    expect(await db.importEntries.count()).toBe(0);
+  });
+
+  it('refuses a backup that a newer app version wrote', async () => {
+    const newer = {
+      schemaVersion: SCHEMA_VERSION + 1,
+      exportedAt: Date.now(),
+      tables: {
+        brands: [],
+        categories: [],
+        locations: [],
+        products: [],
+        stockLevels: [],
+        movements: [],
+        priceChanges: [],
+        stockTakes: [],
+        stockTakeItems: [],
+        settings: [],
+      },
+    };
+    const blob = new Blob([
+      zipSync({ 'data.json': strToU8(JSON.stringify(newer)) }) as unknown as BlobPart,
+    ]);
+
+    const failure = await readBackup(blob).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(BackupInvalidError);
+    expect((failure as BackupInvalidError).detail).toContain(String(SCHEMA_VERSION + 1));
+
+    // The refusal must come before anything is wiped: the shop data stays.
+    await seedCatalogue(db);
+    await expect(restoreBackup(blob, 'replace', db)).rejects.toBeInstanceOf(BackupInvalidError);
+    expect(await db.products.count()).toBe(1);
+    expect(await db.movements.count()).toBe(2);
   });
 
   it('rejects a file that is not a backup and leaves data untouched', async () => {

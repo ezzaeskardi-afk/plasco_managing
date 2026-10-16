@@ -26,6 +26,7 @@ import type { Brand, Category, Location, Product } from '@/db/types';
 import { parseIntegerInput } from '@/domain/numbers';
 import { fa } from '@/i18n/fa';
 import { toastError, toastSuccess } from '@/lib/toast';
+import { useSettings } from '@/app/settings-context';
 import { fileToPhoto } from './photo';
 import { usePhotoUrl } from './photo';
 
@@ -114,6 +115,7 @@ export function ProductFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
+  const { costVisible } = useSettings();
 
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -235,13 +237,18 @@ export function ProductFormPage() {
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <NumberField
-          id="buyPrice"
-          label={fa.products.buyPrice}
-          value={watch('buyPrice')}
-          onChange={(value) => setValue('buyPrice', value)}
-          error={errors.buyPrice?.message}
-        />
+        {/* Editing an existing row would reveal its stored cost, so the field
+            stays hidden while the lock is on; the form state still submits the
+            untouched value. Creating starts blank, so the field stays. */}
+        {!isEdit || costVisible ? (
+          <NumberField
+            id="buyPrice"
+            label={fa.products.buyPrice}
+            value={watch('buyPrice')}
+            onChange={(value) => setValue('buyPrice', value)}
+            error={errors.buyPrice?.message}
+          />
+        ) : null}
         <NumberField
           id="retailPrice"
           label={fa.products.retailPrice}

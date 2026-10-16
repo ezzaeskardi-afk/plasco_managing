@@ -37,6 +37,16 @@ export function KpiBlock({
   );
 }
 
+/** Masked placeholder for any money value the cost lock hides (KPI, history rows). */
+export function LockedValue({ className }: { className?: string }) {
+  return (
+    <span className={cn('inline-flex items-center gap-1 text-crate', className)}>
+      <Lock className="size-4" />
+      <span aria-label={fa.settings.costLock}>•••</span>
+    </span>
+  );
+}
+
 /** Hides cost and profit numbers when the PIN lock is on. */
 export function MoneyText({
   value,
@@ -51,12 +61,7 @@ export function MoneyText({
 }) {
   const { costVisible, settings } = useSettings();
   if (!costVisible) {
-    return (
-      <span className={cn('inline-flex items-center gap-1 text-crate', className)}>
-        <Lock className="size-4" />
-        <span aria-label={fa.settings.costLock}>•••</span>
-      </span>
-    );
+    return <LockedValue className={className} />;
   }
   const label = showLabel ? settings.currencyLabel : '';
   return (

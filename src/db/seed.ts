@@ -103,6 +103,9 @@ export async function wipeAll(target: PlascoDb = db): Promise<void> {
       target.priceChanges,
       target.stockTakes,
       target.stockTakeItems,
+      // The import undo journal goes with the data it describes.
+      target.imports,
+      target.importEntries,
       target.settings,
     ],
     async () => {
@@ -117,6 +120,8 @@ export async function wipeAll(target: PlascoDb = db): Promise<void> {
         target.priceChanges.clear(),
         target.stockTakes.clear(),
         target.stockTakeItems.clear(),
+        target.imports.clear(),
+        target.importEntries.clear(),
         target.settings.clear(),
       ]);
     },

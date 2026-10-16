@@ -392,14 +392,40 @@ export async function listMovements(
   filter: MovementFilter = {},
   target: PlascoDb = db,
 ): Promise<Movement[]> {
+  // Same rule as before: an absent or non-positive limit means "everything".
+  const limit = filter.limit && filter.limit > 0 ? filter.limit : undefined;
+  const hasTypeFilter = (filter.types?.length ?? 0) > 0;
+  const from = filter.from ?? 0;
+  const to = filter.to ?? Number.MAX_SAFE_INTEGER;
+  const hasWindow = filter.from != null || filter.to != null;
+
   let rows: Movement[];
-  if (filter.productId) {
+  if (filter.productId && !filter.locationId && !hasTypeFilter && limit != null) {
+    // `[productId+at]` answers "newest N of one product" without reading the
+    // whole history into memory (the product detail page asks for 20).
+    rows = await target.movements
+      .where('[productId+at]')
+      .between([filter.productId, from], [filter.productId, to], true, true)
+      .reverse()
+      .limit(limit)
+      .toArray();
+  } else if (filter.productId) {
     rows = await target.movements.where('productId').equals(filter.productId).toArray();
   } else if (filter.locationId) {
     rows = await target.movements.where('locationId').equals(filter.locationId).toArray();
   } else {
-    rows = await target.movements.orderBy('at').reverse().toArray();
+    // The date window rides the `at` index, and the limit goes to the database
+    // so a long ledger is not read just to keep its tail. A pending type filter
+    // cuts rows afterwards, so the database limit has to wait for it.
+    const collection = hasWindow
+      ? target.movements.where('at').between(from, to, true, true).reverse()
+      : target.movements.orderBy('at').reverse();
+    rows =
+      limit != null && !hasTypeFilter
+        ? await collection.limit(limit).toArray()
+        : await collection.toArray();
   }
+
   let filtered = rows;
   if (filter.locationId && filter.productId) {
     filtered = filtered.filter((m) => m.locationId === filter.locationId);
@@ -410,5 +436,5 @@ export async function listMovements(
   if (filter.from != null) filtered = filtered.filter((m) => m.at >= filter.from!);
   if (filter.to != null) filtered = filtered.filter((m) => m.at <= filter.to!);
   filtered.sort((a, b) => b.at - a.at);
-  return filter.limit ? filtered.slice(0, filter.limit) : filtered;
+  return limit != null ? filtered.slice(0, limit) : filtered;
 }

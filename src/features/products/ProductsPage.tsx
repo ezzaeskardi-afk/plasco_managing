@@ -14,6 +14,7 @@ import { buildSearchIndex, searchIndex } from '@/domain/search';
 import { productTotals, stockState } from '@/domain/valuation';
 import { fa } from '@/i18n/fa';
 import { cn } from '@/lib/utils';
+import { useSettings } from '@/app/settings-context';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { PriceEditSheet } from './PriceEditSheet';
 import { ProductThumb } from './ProductThumb';
@@ -23,6 +24,7 @@ type SortKey = 'name' | 'qty' | 'value';
 export function ProductsPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+  const { costVisible } = useSettings();
   const [term, setTerm] = useState(params.get('q') ?? '');
   const [debounced, setDebounced] = useState(term);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -43,7 +45,10 @@ export function ProductsPage() {
   const categoryId = params.get('category') ?? '';
   const locationId = params.get('location') ?? '';
   const state = params.get('state') ?? '';
-  const sort = (params.get('sort') as SortKey | null) ?? 'name';
+  const rawSort = (params.get('sort') as SortKey | null) ?? 'name';
+  // The value sort compares hidden cost prices, so while the lock is on the
+  // page stays on name order (the option also disappears from the filter sheet).
+  const sort: SortKey = rawSort === 'value' && !costVisible ? 'name' : rawSort;
 
   const totals = useMemo(() => productTotals(levels ?? []), [levels]);
   const totalsByLocation = useMemo(() => {
@@ -241,7 +246,7 @@ export function ProductsPage() {
               options={[
                 { value: 'name', label: fa.products.sortName },
                 { value: 'qty', label: fa.products.sortQty },
-                { value: 'value', label: fa.products.sortValue },
+                ...(costVisible ? [{ value: 'value', label: fa.products.sortValue }] : []),
               ]}
               aria-label={fa.products.sort}
             />

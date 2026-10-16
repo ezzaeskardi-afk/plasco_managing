@@ -22,7 +22,7 @@ function stamp(): string {
 }
 
 export function DataPage() {
-  const { settings, update } = useSettings();
+  const { settings, update, costVisible } = useSettings();
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<'replace' | 'merge'>('replace');
   const [usage, setUsage] = useState<{ used: number; quota: number } | null>(null);
@@ -61,6 +61,9 @@ export function DataPage() {
       const totals = new Map<string, number>();
       for (const level of levels) totals.set(level.productId, (totals.get(level.productId) ?? 0) + level.qty);
 
+      // The export is a file an employee could carry away, so with the cost lock
+      // on the two cost columns are left out entirely (the headers drop with them).
+      const costColumns = costVisible;
       const productHeader = [
         'کد',
         'نام',
@@ -69,12 +72,12 @@ export function DataPage() {
         'دسته',
         'بارکد',
         'تعداد در بسته',
-        'قیمت خرید',
+        ...(costColumns ? ['قیمت خرید'] : []),
         'قیمت خرده',
         'قیمت عمده',
         'حداقل موجودی',
         'موجودی کل',
-        'ارزش خرید',
+        ...(costColumns ? ['ارزش خرید'] : []),
       ];
       const productRows = products.map((product) => [
         product.code,
@@ -84,12 +87,12 @@ export function DataPage() {
         product.categoryId ? (categoryMap.get(product.categoryId) ?? '') : '',
         product.barcodes.join(' '),
         product.packSize,
-        product.buyPrice,
+        ...(costColumns ? [product.buyPrice] : []),
         product.retailPrice,
         product.wholesalePrice ?? '',
         product.minStock ?? '',
         totals.get(product.id) ?? 0,
-        (totals.get(product.id) ?? 0) * product.buyPrice,
+        ...(costColumns ? [(totals.get(product.id) ?? 0) * product.buyPrice] : []),
       ]);
 
       const levelHeader = ['کد کالا', 'نام کالا', 'مکان', 'قفسه', 'موجودی'];

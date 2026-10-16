@@ -9,6 +9,7 @@ import {
   listBrands,
   listLocations,
   getProduct,
+  listMovements,
   setBin,
   setSettings,
   softDelete,
@@ -254,6 +255,71 @@ describe('movements', () => {
 
   it('reports a missing movement', async () => {
     await expect(undoMovement('nope', db)).rejects.toThrow('MovementNotFound');
+  });
+});
+
+describe('listMovements', () => {
+  it('keeps the ledger newest-first and honors the limit', async () => {
+    const product = await createProduct(draft(), db);
+    for (let i = 1; i <= 5; i += 1) {
+      await applyMovement(
+        { productId: product.id, locationId: 'loc-shop', type: 'receive', qty: 1, at: 1_000 + i },
+        db,
+      );
+    }
+
+    const rows = await listMovements({ limit: 2 }, db);
+    expect(rows.map((m) => m.at)).toEqual([1_005, 1_004]);
+  });
+
+  it('applies an inclusive date window', async () => {
+    const product = await createProduct(draft(), db);
+    for (const at of [1_000, 2_000, 3_000]) {
+      await applyMovement({ productId: product.id, locationId: 'loc-shop', type: 'receive', qty: 1, at }, db);
+    }
+
+    const rows = await listMovements({ from: 2_000, to: 3_000 }, db);
+    expect(rows.map((m) => m.at)).toEqual([3_000, 2_000]);
+  });
+
+  it('filters by type before the limit cuts rows', async () => {
+    const product = await createProduct(draft(), db);
+    for (let i = 1; i <= 3; i += 1) {
+      await applyMovement(
+        { productId: product.id, locationId: 'loc-shop', type: 'receive', qty: 5, at: i * 1_000 },
+        db,
+      );
+    }
+    await applyMovement({ productId: product.id, locationId: 'loc-shop', type: 'sale', qty: -1, at: 4_000 }, db);
+
+    // The newest two rows overall are sale + receive; a database-level limit
+    // would leave only one receive after the JS type filter.
+    const rows = await listMovements({ types: ['receive'], limit: 2 }, db);
+    expect(rows.map((m) => m.at)).toEqual([3_000, 2_000]);
+  });
+
+  it('scopes a limited query to one product through the compound index', async () => {
+    const a = await createProduct(draft(), db);
+    const b = await createProduct(draft({ name: 'سطل' }), db);
+    await applyMovement({ productId: a.id, locationId: 'loc-shop', type: 'receive', qty: 1, at: 1_000 }, db);
+    await applyMovement({ productId: b.id, locationId: 'loc-shop', type: 'receive', qty: 1, at: 2_000 }, db);
+    await applyMovement({ productId: a.id, locationId: 'loc-shop', type: 'receive', qty: 1, at: 3_000 }, db);
+    await applyMovement({ productId: b.id, locationId: 'loc-shop', type: 'receive', qty: 1, at: 4_000 }, db);
+    await applyMovement({ productId: a.id, locationId: 'loc-shop', type: 'receive', qty: 1, at: 5_000 }, db);
+
+    const rows = await listMovements({ productId: a.id, limit: 2 }, db);
+    expect(rows.map((m) => m.at)).toEqual([5_000, 3_000]);
+    expect(rows.every((m) => m.productId === a.id)).toBe(true);
+  });
+
+  it('combines the product scope with a window and a limit', async () => {
+    const product = await createProduct(draft(), db);
+    for (const at of [1_000, 2_000, 3_000, 4_000, 5_000]) {
+      await applyMovement({ productId: product.id, locationId: 'loc-shop', type: 'receive', qty: 1, at }, db);
+    }
+
+    const rows = await listMovements({ productId: product.id, from: 2_000, to: 4_000, limit: 2 }, db);
+    expect(rows.map((m) => m.at)).toEqual([4_000, 3_000]);
   });
 });
 

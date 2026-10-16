@@ -2,6 +2,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { z } from 'zod';
 import { SCHEMA_VERSION } from '@/app/version';
 import { formatProductCode } from '@/domain/codes';
+import { fa } from '@/i18n/fa';
 import { db, type PlascoDb } from './dexie';
 import type { Product } from './types';
 import { rebuildStockLevels } from './rebuild';
@@ -117,7 +118,7 @@ const stockTakeItemSchema = z.object({
 const settingsSchema = z.object({ key: z.string(), value: z.unknown() });
 
 export const backupSchema = z.object({
-  schemaVersion: z.number(),
+  schemaVersion: z.number().int().min(1),
   exportedAt: z.number(),
   tables: z.object({
     brands: z.array(brandSchema),
@@ -261,6 +262,13 @@ export async function readBackup(file: Blob): Promise<{
 
   const result = backupSchema.safeParse(parsed);
   if (!result.success) throw new BackupInvalidError(result.error.issues[0]?.message);
+  // A file from a newer schema may carry tables and fields this build cannot
+  // load; refusing with a readable reason beats silently dropping shop data.
+  if (result.data.schemaVersion > SCHEMA_VERSION) {
+    throw new BackupInvalidError(
+      fa.importexport.backupNewer.replace('{version}', String(result.data.schemaVersion)),
+    );
+  }
 
   const photos = new Map<ID, { thumb?: Uint8Array; full?: Uint8Array }>();
   for (const [name, bytes] of Object.entries(entries)) {
@@ -360,6 +368,11 @@ export async function restoreBackup(
         target.stockTakes,
         target.stockTakeItems,
         target.photos,
+        // The undo journal belongs to the outgoing dataset: its rows point at
+        // products and movements replace is about to delete, so it goes too
+        // (a stale `product-updated` row could otherwise rewrite prices later).
+        target.imports,
+        target.importEntries,
       ],
       async () => {
         await Promise.all([
@@ -373,6 +386,8 @@ export async function restoreBackup(
           target.stockTakes.clear(),
           target.stockTakeItems.clear(),
           target.photos.clear(),
+          target.imports.clear(),
+          target.importEntries.clear(),
         ]);
         await target.brands.bulkPut(t.brands);
         await target.categories.bulkPut(t.categories);

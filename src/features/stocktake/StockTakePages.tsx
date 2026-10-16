@@ -18,6 +18,7 @@ import { fa } from '@/i18n/fa';
 import { MoneyText } from '@/components/common/Kpi';
 import { newId } from '@/lib/id';
 import { toastError, toastSuccess, toastUndo } from '@/lib/toast';
+import { useSettings } from '@/app/settings-context';
 
 export function StockTakeListPage() {
   const navigate = useNavigate();
@@ -380,6 +381,7 @@ export function StockTakeReviewPage() {
   const items = useCounted(id);
   const [treatUncountedAsZero, setTreatUncountedAsZero] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { costVisible } = useSettings();
 
   const levelIndex = useMemo(() => {
     const map = new Map<ID, number>();
@@ -404,8 +406,14 @@ export function StockTakeReviewPage() {
         return { item, product, current, delta, value: Math.abs(delta) * (product?.buyPrice ?? 0) };
       })
       .filter((row) => row.product);
-    return list.sort((a, b) => b.value - a.value);
-  }, [session, items, products, levelIndex]);
+    // Financial impact sorts by cost, which the lock hides; a locked device sees
+    // the biggest piece differences first instead (the values are masked anyway).
+    return list.sort(
+      costVisible
+        ? (a, b) => b.value - a.value
+        : (a, b) => Math.abs(b.delta) - Math.abs(a.delta),
+    );
+  }, [session, items, products, levelIndex, costVisible]);
 
   if (!session) return <p className="text-crate">{fa.common.loading}</p>;
   if (session.status !== 'open') {

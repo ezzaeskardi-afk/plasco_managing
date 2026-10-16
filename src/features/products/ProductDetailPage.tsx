@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { MoneyText, Section } from '@/components/common/Kpi';
+import { MoneyText, LockedValue, Section } from '@/components/common/Kpi';
 import { StockStack } from '@/components/common/StockStack';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
@@ -31,6 +31,7 @@ import type { Product, PriceChange } from '@/db/types';
 import { formatJalali, formatMoney, formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
 import { toastUndo } from '@/lib/toast';
+import { useSettings } from '@/app/settings-context';
 import { PriceEditSheet } from './PriceEditSheet';
 import { ProductThumb } from './ProductThumb';
 import { MovementRow } from '@/features/stock/MovementRow';
@@ -59,6 +60,7 @@ export function ProductDetailPage() {
   );
   const [binDraft, setBinDraft] = useState<{ key: string; value: string } | null>(null);
   const [priceOpen, setPriceOpen] = useState(false);
+  const { costVisible } = useSettings();
 
   if (!product) return <p className="text-crate">{fa.common.loading}</p>;
 
@@ -222,15 +224,26 @@ export function ProductDetailPage() {
           <p className="text-crate">{fa.common.none}</p>
         ) : (
           <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
-            {priceChanges.slice(0, 20).map((change) => (
-              <li key={change.id} className="flex items-center gap-3 p-3">
-                <span className="flex-1 text-ink">{PRICE_FIELD_LABELS[change.field] ?? change.field}</span>
-                <span className="tnum text-[0.9rem] text-crate">{formatMoney(change.oldValue)}</span>
-                <span className="text-crate">←</span>
-                <span className="tnum font-bold text-ink">{formatMoney(change.newValue)}</span>
-                <span className="text-[0.8rem] text-crate">{formatJalali(change.at)}</span>
-              </li>
-            ))}
+            {priceChanges.slice(0, 20).map((change) => {
+              // A buy-price change would leak the cost the lock hides, so its
+              // old/new values are masked; retail and wholesale stay readable.
+              const hiddenBuy = !costVisible && change.field === 'buy';
+              return (
+                <li key={change.id} className="flex items-center gap-3 p-3">
+                  <span className="flex-1 text-ink">{PRICE_FIELD_LABELS[change.field] ?? change.field}</span>
+                  {hiddenBuy ? (
+                    <LockedValue />
+                  ) : (
+                    <>
+                      <span className="tnum text-[0.9rem] text-crate">{formatMoney(change.oldValue)}</span>
+                      <span className="text-crate">←</span>
+                      <span className="tnum font-bold text-ink">{formatMoney(change.newValue)}</span>
+                    </>
+                  )}
+                  <span className="text-[0.8rem] text-crate">{formatJalali(change.at)}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Section>

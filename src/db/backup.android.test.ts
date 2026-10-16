@@ -16,7 +16,12 @@ import { PlascoDb } from './dexie';
  * items, a price change, four locations and the settings row.
  *
  * To regenerate it: in the Android app go to «بیشتر ← بکاپ و بازیابی ← بکاپ گرفتن»
- * and copy the saved ZIP here unchanged.
+ * and copy the saved ZIP here unchanged. The original 1.2.0 file (kept here) was
+ * written before the Android side stopped reading epoch-ms columns with `getInt`/
+ * `optInt`: every table timestamp had been truncated to 32 bits (a 2024 export
+ * carried 2001 dates). The fixture was repaired by adding a single 417×2^32 — the
+ * unique wrap count that lands every timestamp in the same working session as
+ * `exportedAt` — and the timestamps test below now guards against that regression.
  */
 // import.meta.url is not a file URL under vitest's jsdom transform, so resolve from the runner cwd.
 const fixture = resolve(process.cwd(), 'src/db/fixtures/android-backup.zip');
@@ -56,6 +61,27 @@ describe('a backup written by the Android app', () => {
     expect(product?.packSize).toBe(12);
     expect(data.tables.products.find((row) => row.id === 'prod-2')?.deletedAt).toBeTypeOf('number');
     expect(new Set(data.tables.movements.map((row) => row.type)).size).toBe(10);
+  });
+
+  it('carries real epoch-millisecond timestamps, not 32-bit leftovers', async () => {
+    const { data } = await readBackup(file);
+    const fields = ['createdAt', 'updatedAt', 'deletedAt', 'at', 'appliedAt'];
+    const rows = Object.values(data.tables).flat() as Array<Record<string, unknown>>;
+    const day = 24 * 60 * 60 * 1000;
+    let checked = 0;
+    for (const row of rows) {
+      for (const field of fields) {
+        const value = row[field];
+        if (typeof value !== 'number') continue;
+        // A 32-bit-truncated epoch ms lands decades away from the export time.
+        expect(
+          Math.abs(value - data.exportedAt),
+          `${field} = ${new Date(value).toISOString()}`,
+        ).toBeLessThan(2 * day);
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThan(40);
   });
 
   it('carries the product photo in the same two entries as this app', async () => {

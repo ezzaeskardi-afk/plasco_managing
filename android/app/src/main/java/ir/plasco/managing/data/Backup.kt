@@ -171,8 +171,12 @@ class BackupRepo(
     private val stock: StockRepo,
 ) {
 
-    /** ZIP سازگار با نسخهٔ وب. تاریخ آخرین بکاپ هم به‌روز می‌شود. */
-    suspend fun createBackup(): Pair<ByteArray, BackupSummary> {
+    /**
+     * ZIP سازگار با نسخهٔ وب. تاریخ آخرین بکاپ هم به‌روز می‌شود.
+     * خواندن همهٔ جدول‌ها و نوشتن ZIP روی رشتهٔ IO انجام می‌شود؛ روی ترد اصلی
+     * با هزاران ردیف و عکس، فریز و ANR می‌داد.
+     */
+    suspend fun createBackup(): Pair<ByteArray, BackupSummary> = withContext(Dispatchers.IO) {
         val db = helper.readableDatabase
         val root = JSONObject()
         root.put("schemaVersion", BACKUP_SCHEMA_VERSION)
@@ -190,25 +194,23 @@ class BackupRepo(
         root.put("tables", tables)
 
         var photos = 0
-        val bytes = withContext(Dispatchers.IO) {
-            val out = ByteArrayOutputStream()
-            ZipOutputStream(out).use { zip ->
-                zip.putNextEntry(ZipEntry("data.json"))
-                zip.write(root.toString().toByteArray(Charsets.UTF_8))
-                zip.closeEntry()
-                photos = BackupPhotos.write(zip, db)
-            }
-            out.toByteArray()
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { zip ->
+            zip.putNextEntry(ZipEntry("data.json"))
+            zip.write(root.toString().toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+            photos = BackupPhotos.write(zip, db)
         }
+        val bytes = out.toByteArray()
         settings.update { it.copy(lastBackupAt = System.currentTimeMillis()) }
-        return bytes to BackupSummary(products, movements, photos, bytes.size)
+        bytes to BackupSummary(products, movements, photos, bytes.size)
     }
 
     /**
      * بازیابی. قبل از هر کاری همهٔ ساختار فایل بررسی می‌شود؛ اگر ناقص باشد
      * هیچ چیزی عوض نمی‌شود (خطای BackupInvalidException با علت خوانا).
      */
-    suspend fun restore(bytes: ByteArray, mode: RestoreMode): RestoreSummary {
+    suspend fun restore(bytes: ByteArray, mode: RestoreMode): RestoreSummary = withContext(Dispatchers.IO) {
         val parsed = parseBackup(bytes)
         val data = parsed.tables
         var products = 0
@@ -258,7 +260,7 @@ class BackupRepo(
             db.endTransaction()
         }
         hub.reloadAll()
-        return RestoreSummary(mode, products, movements, photos, renumbered)
+        RestoreSummary(mode, products, movements, photos, renumbered)
     }
 
     /** فایل را می‌خواند و فقط ساختار را بررسی می‌کند (برای پیش‌نمایش). */
@@ -321,7 +323,10 @@ class BackupRepo(
                     if (cursor.isNull(index)) continue // کلیدهای خالی اصلاً نوشته نمی‌شوند
                     when (column.kind) {
                         Kind.Text, Kind.OptionalText -> row.put(column.key, cursor.getString(index))
-                        Kind.Int, Kind.OptionalInt -> row.put(column.key, cursor.getInt(index))
+                        // getInt مهرهای زمانی میلی‌ثانیه‌ای را به ۳۲ بیت می‌بُرید
+                        // (createdAt/updatedAt/deletedAt/at/appliedAt هرکدام > 2^31)؛
+                        // همهٔ اعداد با getLong خوانده می‌شوند — اعداد کوچک هم مشکلی ندارند.
+                        Kind.Int, Kind.OptionalInt -> row.put(column.key, cursor.getLong(index))
                         Kind.Bool -> row.put(column.key, cursor.getInt(index) != 0)
                         Kind.Barcodes -> {
                             val list = JSONArray()
@@ -372,7 +377,9 @@ class BackupRepo(
             if (!row.has(column.key)) continue
             when (column.kind) {
                 Kind.Text, Kind.OptionalText -> values.put(column.key, row.getString(column.key))
-                Kind.Int, Kind.OptionalInt -> values.put(column.key, row.optInt(column.key))
+                // optInt همین‌جا مهرهای زمانی فایل را می‌بُرید و با ۲^۳۲ جمع می‌شد
+                // (تاریخ‌های ۲۰۰۱)؛ optLong همان چیزی را برمی‌گرداند که ذخیره شده.
+                Kind.Int, Kind.OptionalInt -> values.put(column.key, row.optLong(column.key))
                 Kind.Bool -> values.put(column.key, if (row.optBoolean(column.key)) 1 else 0)
                 Kind.Barcodes -> {
                     val list = row.optJSONArray(column.key)

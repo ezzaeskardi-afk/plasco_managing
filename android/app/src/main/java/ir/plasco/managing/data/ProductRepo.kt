@@ -95,6 +95,11 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
             minStock = product.minStock?.let { maxOf(0, it) },
         )
         inTransaction { db ->
+            // ویرایش هم مثل «کالای جدید» کد تکراری را با پیام فارسی رد می‌کند،
+            // نه با خطای خام UNIQUE constraint.
+            if (updated.code != before.code && codeExists(db, updated.code)) {
+                throw IllegalArgumentException("DuplicateProductCode")
+            }
             db.update("products", updated.toValues(), "id = ?", arrayOf(updated.id))
             for ((field, oldValue, newValue) in diffPrices(before, updated)) {
                 db.insertOrThrow(

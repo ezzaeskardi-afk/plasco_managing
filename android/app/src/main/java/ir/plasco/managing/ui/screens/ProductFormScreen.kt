@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +78,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
     var piecesIn by remember { mutableStateOf("") }
     var locationId by remember(locations) { mutableStateOf(locations.firstOrNull()?.id.orEmpty()) }
     var busy by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     fun save() {
         if (name.isBlank()) {
@@ -270,14 +273,9 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                 }
                 Spacer(Modifier.height(8.dp))
                 if (existing != null) {
+                    // حذف بی‌واگرد است؛ مثل تأییدهای نسخهٔ وب یک پرسش می‌آید.
                     OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                container.products.softDelete(existing.id)
-                                showMessage(Fa.products.deleted)
-                                onDone()
-                            }
-                        },
+                        onClick = { confirmDelete = true },
                     ) {
                         Text(Fa.common.delete, color = toneColor(StockState.Out))
                     }
@@ -320,6 +318,29 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
             onDismiss = { scanOpen = false },
         )
     }
+
+    if (confirmDelete && existing != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(Fa.common.confirm) },
+            text = { Text(Fa.products.deleteConfirm.replace("{name}", existing.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        scope.launch {
+                            container.products.softDelete(existing.id)
+                            showMessage(Fa.products.deleted)
+                            onDone()
+                        }
+                    },
+                ) { Text(Fa.common.delete, color = toneColor(StockState.Out)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text(Fa.common.cancel) }
+            },
+        )
+    }
 }
 
 /** خطاها را به جملهٔ فارسی تبدیل می‌کند. */
@@ -329,6 +350,7 @@ internal fun messageFor(error: Throwable): String = when {
     error.message?.contains("MovementQtyMustBeNonZero") == true -> Fa.movements.notEnough
     error.message?.contains("AlreadyUndone") == true -> Fa.errors.alreadyUndone
     error.message?.contains("TransferSameLocation") == true -> Fa.movements.transferSame
+    error.message?.contains("StockTakeEmpty") == true -> Fa.stocktake.nothingCounted
     else -> error.message ?: Fa.errors.failed
 }
 

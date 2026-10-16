@@ -73,12 +73,15 @@ fun StockTakeScreen(onBack: () -> Unit) {
         levels.filter { it.locationId == locationId }.associate { it.productId to it.qty }
     }
 
+    // فقط متن‌های عددی معتبر شمرده می‌شوند؛ «اعمال» هم از همین نقشه تغذیه می‌شود
+    // تا جلسهٔ خالی ثبت نشود (همان محافظی که نسخهٔ وب دارد).
+    val counted = remember(counts.toMap()) {
+        counts.mapNotNull { (productId, text) -> parseIntegerInput(text)?.let { productId to it } }.toMap()
+    }
+
     // تعداد کالاهایی که واقعاً عوض می‌شوند — همان هشداری که نسخهٔ وب می‌دهد.
-    val changes = remember(counts.toMap(), atLocation) {
-        counts.count { (productId, text) ->
-            val counted = parseIntegerInput(text) ?: return@count false
-            (atLocation[productId] ?: 0) != counted
-        }
+    val changes = remember(counted, atLocation) {
+        counted.count { (productId, count) -> (atLocation[productId] ?: 0) != count }
     }
 
     // ثبت شمارش همان کالایی که همین حالا خوانده شد؛ «و بارکد بعدی» دوربین را بازمی‌گرداند.
@@ -154,11 +157,8 @@ fun StockTakeScreen(onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(8.dp))
                 Button(
-                    enabled = !busy && counts.isNotEmpty(),
+                    enabled = !busy && counted.isNotEmpty(),
                     onClick = {
-                        val counted = counts.mapNotNull { (productId, text) ->
-                            parseIntegerInput(text)?.let { productId to it }
-                        }.toMap()
                         busy = true
                         scope.launch {
                             try {

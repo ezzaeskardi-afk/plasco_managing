@@ -20,10 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ir.plasco.managing.domain.formatFull
 import ir.plasco.managing.domain.formatMoney
 import ir.plasco.managing.domain.formatQty
-import ir.plasco.managing.domain.productTotals
 import ir.plasco.managing.domain.stockAlerts
 import ir.plasco.managing.domain.valuate
 import ir.plasco.managing.model.ID
@@ -56,11 +54,16 @@ fun HomeScreen(
 
     val valuation = remember(products, levels) { valuate(products, levels) }
     val alerts = remember(products, levels) { stockAlerts(products, levels) }
-    val totals = remember(levels) { productTotals(levels) }
     val brandNames = remember(brands) { brands.associate { it.id to it.name } }
-    val perLocation = remember(levels, locations) {
+    // مثل نسخهٔ وب: فقط کالاهای فعال و فقط سهم مثبت هر مکان (valuate byLocation).
+    val activeIds = remember(products) {
+        products.filter { it.active && it.deletedAt == null }.map { it.id }.toSet()
+    }
+    val perLocation = remember(levels, locations, activeIds) {
         locations.map { location ->
-            location.name to levels.filter { it.locationId == location.id }.sumOf { if (it.qty > 0) it.qty else 0 }
+            location.name to levels
+                .filter { it.locationId == location.id && it.qty > 0 && it.productId in activeIds }
+                .sumOf { it.qty }
         }
     }
     val backupStale = remember(settings.lastBackupAt) {
@@ -83,7 +86,7 @@ fun HomeScreen(
             Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     KpiBlock(Fa.home.pieces, valuation.pieces.toLong(), Modifier.weight(1f))
-                    KpiBlock(Fa.home.sku, valuation.skuCount.toLong(), Modifier.weight(1f))
+                    KpiBlock(Fa.home.sku, valuation.productCount.toLong(), Modifier.weight(1f))
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     KpiBlock(Fa.home.costValue, valuation.cost, Modifier.weight(1f))
@@ -141,7 +144,7 @@ fun HomeScreen(
         }
         val low = alerts.first
         if (low.isEmpty()) {
-            item { EmptyState(Fa.home.allGood) }
+            item { EmptyState(Fa.home.lowEmpty) }
         } else {
             items(minOf(low.size, ALERT_LIMIT)) { index ->
                 val row = low[index]
@@ -157,7 +160,7 @@ fun HomeScreen(
         item { SectionTitle(Fa.home.outTitle, Modifier.padding(horizontal = 12.dp)) }
         val out = alerts.second
         if (out.isEmpty()) {
-            item { EmptyState(Fa.home.allGood) }
+            item { EmptyState(Fa.home.outEmpty) }
         } else {
             items(minOf(out.size, ALERT_LIMIT)) { index ->
                 val row = out[index]
@@ -173,7 +176,7 @@ fun HomeScreen(
         item {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
-                    "${Fa.home.sku}: ${formatFull(totals.size)} · ${Fa.more.dataOnDevice}",
+                    Fa.more.dataOnDevice,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -287,7 +287,9 @@ fun movementLabel(type: MovementType): String = when (type) {
 @Composable
 fun movementTone(type: MovementType): Color {
     return when {
-        type == MovementType.Sale || type == MovementType.Damage || type == MovementType.TransferOut ->
+        // «برگشت به فروشنده» هم خروجی است و مثل نسخهٔ وب قرمز نشان داده می‌شود.
+        type == MovementType.Sale || type == MovementType.Damage ||
+            type == MovementType.TransferOut || type == MovementType.ReturnOut ->
             toneColor(ir.plasco.managing.model.StockState.Out)
         type == MovementType.TransferIn ->
             toneColor(ir.plasco.managing.model.StockState.Ok)

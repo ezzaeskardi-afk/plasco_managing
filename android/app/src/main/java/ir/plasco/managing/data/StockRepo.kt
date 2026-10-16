@@ -98,6 +98,8 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
      * `count` نوشته می‌شود. همه در یک تراکنش؛ یا همه یا هیچ.
      */
     suspend fun applyStockTake(locationId: ID, counts: Map<ID, Int>, note: String? = null): StockTake {
+        // جلسهٔ خالی ثبت نمی‌شود؛ همان محافظی که نسخهٔ وب در applyStockTake دارد.
+        if (counts.isEmpty()) throw IllegalArgumentException("StockTakeEmpty")
         val now = System.currentTimeMillis()
         val take = inTransaction { db ->
             val id = newId()
@@ -305,7 +307,10 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
             }
         }
         val now = System.currentTimeMillis()
+        var written = 0
         for ((key, qty) in totals) {
+            // ردیف صفرِ بی‌سابقه ساخته نمی‌شود (مثل نسخهٔ وب).
+            if (qty == 0 && !bins.containsKey(key)) continue
             db.insertWithOnConflict(
                 "stockLevels",
                 null,
@@ -318,8 +323,27 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
                 },
                 SQLiteDatabase.CONFLICT_REPLACE,
             )
+            written += 1
         }
-        return totals.size
+        // مثل نسخهٔ وب: ردیفی که فقط قفسه داشت (بدون هیچ حرکتی) با تعداد صفر
+        // می‌ماند تا جای قفسه گم نشود؛ ردیف بدون قفسه دور ریخته می‌شود.
+        for ((key, bin) in bins) {
+            if (totals.containsKey(key) || bin.isNullOrEmpty()) continue
+            db.insertWithOnConflict(
+                "stockLevels",
+                null,
+                ContentValues().apply {
+                    put("productId", key.first)
+                    put("locationId", key.second)
+                    put("qty", 0)
+                    put("bin", bin)
+                    put("updatedAt", now)
+                },
+                SQLiteDatabase.CONFLICT_REPLACE,
+            )
+            written += 1
+        }
+        return written
     }
 
     private fun levelRow(db: SQLiteDatabase, productId: ID, locationId: ID): StockLevel? =

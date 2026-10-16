@@ -33,6 +33,7 @@ fun findProductByBarcode(products: List<Product>, raw: String): Product? {
     val keys = barcodeKeys(raw)
     if (keys.isEmpty()) return null
     products.firstOrNull { product -> product.barcodes.any { normalizeBarcode(it) in keys } }?.let { return it }
-    val code = keys.first()
-    return products.firstOrNull { normalizeBarcode(it.code) == code }
+    // کد کالا هم مثل بارکد با همهٔ شکل‌ها بررسی می‌شود: خواندن ۱۲ رقمی باید کد
+    // ۱۳ رقمیِ صفر-ابتدایی را هم پیدا کند و برعکس (قبلاً فقط keys.first() آمد).
+    return products.firstOrNull { product -> normalizeBarcode(product.code) in keys }
 }

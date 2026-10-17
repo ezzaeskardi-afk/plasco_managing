@@ -15,6 +15,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,10 +27,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.plasco.managing.data.MovementInput
+import ir.plasco.managing.domain.cartonPieces
 import ir.plasco.managing.domain.findProductByBarcode
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.parseIntegerInput
-import ir.plasco.managing.domain.piecesFrom
 import ir.plasco.managing.domain.ProductSearchIndex
 import ir.plasco.managing.domain.productTotals
 import ir.plasco.managing.model.MovementType
@@ -68,6 +69,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     val levels by container.hub.levels.collectAsStateWithLifecycle()
     val locations by container.hub.locations.collectAsStateWithLifecycle()
     val brands by container.hub.brands.collectAsStateWithLifecycle()
+    val settings by container.hub.settings.collectAsStateWithLifecycle()
 
     var action by remember {
         mutableStateOf(Action.entries.firstOrNull { it.type?.wire == initialType } ?: Action.Receive)
@@ -76,7 +78,8 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     var locationId by remember(locations) { mutableStateOf(locations.firstOrNull()?.id.orEmpty()) }
     var toLocationId by remember(locations) { mutableStateOf(locations.getOrNull(1)?.id.orEmpty()) }
     var query by remember { mutableStateOf("") }
-    var packs by remember { mutableStateOf("") }
+    var cartons by remember { mutableStateOf("") }
+    var perCarton by remember { mutableStateOf("") }
     var pieces by remember { mutableStateOf("") }
     var unitPrice by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
@@ -92,7 +95,19 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     }
     val totals = remember(levels) { productTotals(levels) }
     val qtyAtLocation = levels.firstOrNull { it.productId == productId && it.locationId == locationId }?.qty ?: 0
-    val qty = piecesFrom(parseIntegerInput(packs) ?: 0, parseIntegerInput(pieces) ?: 0, selected?.packSize ?: 1)
+    val cartonsEntered = parseIntegerInput(cartons) ?: 0
+    val perCartonEntered = parseIntegerInput(perCarton) ?: 0
+    val qty = cartonPieces(cartonsEntered, perCartonEntered, parseIntegerInput(pieces) ?: 0)
+    val perCartonMissing = cartonsEntered > 0 && perCartonEntered < 2
+
+    // «تعداد در کارتن» از خود کالا می‌آید؛ با عوض شدن کالا عددهای فرم صفر می‌شوند
+    // تا تعداد یک کالا روی کالای بعدی ننشیند (به‌جای چسبیدن به کالای قبلی).
+    LaunchedEffect(selected?.id) {
+        cartons = ""
+        pieces = ""
+        val size = selected?.packSize ?: 0
+        perCarton = if (size > 1) size.toString() else ""
+    }
 
     fun submit() {
         val product = selected
@@ -125,6 +140,19 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                             note = note.ifBlank { null },
                         ),
                     )
+                }
+                // «تعداد در کارتن» تایپ‌شده روی سر خود کالا می‌نشیند تا دفعهٔ بعد
+                // پیش‌پر باشد؛ فقط تنظیمات کالاست، نه بخشی از خود حرکت.
+                val perCartonSize = parseIntegerInput(perCarton) ?: 0
+                if (action != Action.Adjust && perCartonSize >= 2 && perCartonSize != product.packSize) {
+                    runCatching {
+                        container.products.update(
+                            product.copy(
+                                packSize = perCartonSize,
+                                packLabel = if (product.packLabel == "عدد") "کارتن" else product.packLabel,
+                            ),
+                        )
+                    }
                 }
                 showMessage(Fa.movements.saved)
                 onDone()
@@ -237,7 +265,14 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
 
         item {
             Panel(modifier = Modifier.padding(12.dp)) {
-                NumberField(Fa.movements.packs, packs, { packs = it })
+                NumberField(Fa.movements.cartons, cartons, { cartons = it })
+                Spacer(Modifier.height(8.dp))
+                NumberField(
+                    Fa.movements.perCarton,
+                    perCarton,
+                    { perCarton = it },
+                    supporting = if (perCartonMissing) Fa.movements.perCartonNeeded else null,
+                )
                 Spacer(Modifier.height(8.dp))
                 NumberField(Fa.movements.pieces, pieces, { pieces = it })
                 Spacer(Modifier.height(8.dp))
@@ -248,7 +283,13 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                 )
                 if (action == Action.Receive || action == Action.Sale) {
                     Spacer(Modifier.height(8.dp))
-                    NumberField(Fa.movements.unitPrice, unitPrice, { unitPrice = it })
+                    NumberField(
+                        Fa.movements.unitPrice,
+                        unitPrice,
+                        { unitPrice = it },
+                        groupThousands = true,
+                        suffix = settings.currencyLabel.ifBlank { "تومان" },
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 TextField(Fa.movements.note, note, { note = it })

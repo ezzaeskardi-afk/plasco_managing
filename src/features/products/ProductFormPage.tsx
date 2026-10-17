@@ -23,6 +23,7 @@ import {
 } from '@/db/repos';
 import { applyMovement } from '@/db/movements';
 import type { Brand, Category, Location, Product } from '@/db/types';
+import { formatNumber } from '@/domain/format';
 import { parseIntegerInput } from '@/domain/numbers';
 import { fa } from '@/i18n/fa';
 import { toastError, toastSuccess } from '@/lib/toast';
@@ -93,6 +94,8 @@ function toDraft(values: FormValues) {
   };
 }
 
+// Prices show grouped Persian digits from the start (۲٬۱۰۰٬۰۰۰); the stored
+// value stays the parsed integer (toDraft runs every field through parseInt).
 function fromProduct(product: Product): FormValues {
   return {
     name: product.name,
@@ -102,9 +105,9 @@ function fromProduct(product: Product): FormValues {
     barcodes: product.barcodes.join('\n'),
     packLabel: product.packLabel,
     packSize: String(product.packSize),
-    buyPrice: String(product.buyPrice),
-    retailPrice: String(product.retailPrice),
-    wholesalePrice: product.wholesalePrice != null ? String(product.wholesalePrice) : '',
+    buyPrice: formatNumber(product.buyPrice),
+    retailPrice: formatNumber(product.retailPrice),
+    wholesalePrice: product.wholesalePrice != null ? formatNumber(product.wholesalePrice) : '',
     minStock: product.minStock != null ? String(product.minStock) : '',
     note: product.note ?? '',
     active: product.active,
@@ -115,7 +118,9 @@ export function ProductFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
-  const { costVisible } = useSettings();
+  const { costVisible, settings } = useSettings();
+  const currency = settings.currencyLabel.trim() || 'تومان';
+  const moneySuffix = <span className="text-[0.8rem]">{currency}</span>;
 
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -247,6 +252,8 @@ export function ProductFormPage() {
             value={watch('buyPrice')}
             onChange={(value) => setValue('buyPrice', value)}
             error={errors.buyPrice?.message}
+            group
+            suffix={moneySuffix}
           />
         ) : null}
         <NumberField
@@ -255,6 +262,8 @@ export function ProductFormPage() {
           value={watch('retailPrice')}
           onChange={(value) => setValue('retailPrice', value)}
           error={errors.retailPrice?.message}
+          group
+          suffix={moneySuffix}
         />
       </div>
 
@@ -338,6 +347,8 @@ export function ProductFormPage() {
               onChange={(value) => setValue('wholesalePrice', value)}
               error={errors.wholesalePrice?.message}
               hint={fa.common.optional}
+              group
+              suffix={moneySuffix}
             />
             <NumberField
               id="minStock"

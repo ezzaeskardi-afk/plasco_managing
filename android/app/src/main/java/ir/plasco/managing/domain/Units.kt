@@ -9,6 +9,14 @@ fun piecesFrom(packs: Int, pieces: Int, packSize: Int): Int {
     return packs * size + pieces
 }
 
+/** کارتن × تعداد در کارتن + عدد. هر سه ورودی منفی به صفر بسته می‌شوند. */
+fun cartonPieces(cartons: Int, perCarton: Int, pieces: Int): Int {
+    val c = if (cartons > 0) cartons else 0
+    val s = if (perCarton > 0) perCarton else 0
+    val p = if (pieces > 0) pieces else 0
+    return c * s + p
+}
+
 /** یک تعداد کل را به بسته + عدد می‌شکند. packSize = ۱ فقط عدد می‌دهد. */
 fun splitPieces(total: Int, packSize: Int): PacksAndPieces {
     val size = if (packSize >= 1) packSize else 1

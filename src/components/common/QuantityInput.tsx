@@ -99,7 +99,7 @@ export function QuantityInput({
   );
 }
 
-function StepButton({
+export function StepButton({
   onClick,
   children,
   label,

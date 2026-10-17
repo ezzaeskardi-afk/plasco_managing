@@ -94,6 +94,31 @@ class UnitsTest {
         assertEquals(PacksAndPieces(2, 3), splitPieces(23, 10))
         assertEquals(PacksAndPieces(-2, -3), splitPieces(-23, 10))
     }
+
+    @Test
+    fun `cartons multiply by the per-carton count and add loose pieces`() {
+        assertEquals(77, cartonPieces(3, 24, 5))
+        assertEquals(5, cartonPieces(0, 24, 5))
+        assertEquals(0, cartonPieces(2, 0, 0))
+        assertEquals(0, cartonPieces(-2, 24, -3))
+    }
+}
+
+class CaretTest {
+
+    @Test
+    fun `digits right of the caret ignore separators`() {
+        assertEquals(0, digitsRightOf("۱۲٬۳۴۵", 6))
+        assertEquals(3, digitsRightOf("۱۲٬۳۴۵", 2))
+        assertEquals(0, digitsRightOf("", 0))
+    }
+
+    @Test
+    fun `caret keeps its digit anchor after regrouping`() {
+        assertEquals(9, caretFromRight("۲٬۱۰۰٬۰۰۰", 0))
+        assertEquals(5, caretFromRight("۲٬۱۰۰٬۰۰۰", 3))
+        assertEquals(0, caretFromRight("۱۲", 2))
+    }
 }
 
 class StockTest {

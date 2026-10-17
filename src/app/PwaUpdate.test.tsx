@@ -13,6 +13,7 @@ interface PreviewFlag {
 }
 
 interface RefreshOptions {
+  onRegisteredSW?: (swUrl: string, registration?: unknown) => void;
   onNeedRefresh?: () => void;
   onRegisterError?: (error: unknown) => void;
 }
@@ -69,5 +70,20 @@ describe('PwaUpdate', () => {
     (window as unknown as PreviewFlag).__PLASCO_PREVIEW__ = true;
     render(<PwaUpdate />);
     expect(registerSW).not.toHaveBeenCalled();
+  });
+
+  it('asks the browser for a fresh worker when the phone comes back online or to the app', () => {
+    render(<PwaUpdate />);
+
+    const update = vi.fn().mockResolvedValue(undefined);
+    const options = vi.mocked(registerSW).mock.calls[0]?.[0] as RefreshOptions;
+    options.onRegisteredSW?.('sw.js', { update });
+
+    window.dispatchEvent(new Event('online'));
+    expect(update).toHaveBeenCalledTimes(1);
+
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(update).toHaveBeenCalledTimes(2);
   });
 });

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { updateProduct } from '@/db/repos';
 import type { Product } from '@/db/types';
+import { formatNumber } from '@/domain/format';
 import { parseIntegerInput } from '@/domain/numbers';
 import { fa } from '@/i18n/fa';
 import { toastError, toastUndo } from '@/lib/toast';
@@ -17,13 +18,15 @@ import { useSettings } from '@/app/settings-context';
  * Mount it with `key={product.id}` so switching rows never keeps a stale draft.
  */
 export function PriceEditSheet({ product, onClose }: { product: Product; onClose: () => void }) {
-  const { costVisible } = useSettings();
-  const [buy, setBuy] = useState(String(product.buyPrice));
-  const [retail, setRetail] = useState(String(product.retailPrice));
+  const { costVisible, settings } = useSettings();
+  const [buy, setBuy] = useState(formatNumber(product.buyPrice));
+  const [retail, setRetail] = useState(formatNumber(product.retailPrice));
   const [wholesale, setWholesale] = useState(
-    product.wholesalePrice != null ? String(product.wholesalePrice) : '',
+    product.wholesalePrice != null ? formatNumber(product.wholesalePrice) : '',
   );
   const [saving, setSaving] = useState(false);
+  const currency = settings.currencyLabel.trim() || 'تومان';
+  const moneySuffix = <span className="text-[0.8rem]">{currency}</span>;
 
   const save = async () => {
     const nextBuy = parseIntegerInput(buy);
@@ -77,19 +80,30 @@ export function PriceEditSheet({ product, onClose }: { product: Product; onClose
         {/* With the cost lock on, the sheet edits retail/wholesale only; the
             hidden buy value is resubmitted unchanged so nothing is lost. */}
         {costVisible ? (
-          <NumberField id="quick-buy" label={fa.products.buyPrice} value={buy} onChange={setBuy} />
+          <NumberField
+            id="quick-buy"
+            label={fa.products.buyPrice}
+            value={buy}
+            onChange={setBuy}
+            group
+            suffix={moneySuffix}
+          />
         ) : null}
         <NumberField
           id="quick-retail"
           label={fa.products.retailPrice}
           value={retail}
           onChange={setRetail}
+          group
+          suffix={moneySuffix}
         />
         <NumberField
           id="quick-wholesale"
           label={fa.products.wholesalePrice}
           value={wholesale}
           onChange={setWholesale}
+          group
+          suffix={moneySuffix}
           hint={fa.common.optional}
         />
 

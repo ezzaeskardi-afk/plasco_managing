@@ -50,3 +50,28 @@ fun parseIntegerInput(raw: String?): Int? {
 }
 
 fun clampInt(value: Int, min: Int, max: Int): Int = value.coerceIn(min, max)
+
+/** چند رقم در سمت راست مکان‌نما هست (جداکننده‌ها شمرده نمی‌شوند). */
+fun digitsRightOf(text: String, caret: Int): Int {
+    var count = 0
+    var index = caret.coerceIn(0, text.length)
+    while (index < text.length) {
+        if (text[index].isDigit()) count++
+        index++
+    }
+    return count
+}
+
+/**
+ * جای مکان‌نما به‌طوری که دقیقاً `digitsRight` رقم سمت راستش بماند؛
+ * برای اینکه گروه‌بندی زندهٔ سهرقمی مکان‌نما را وسط عدد جابه‌جا نکند.
+ */
+fun caretFromRight(text: String, digitsRight: Int): Int {
+    var seen = 0
+    for (index in text.indices.reversed()) {
+        if (!text[index].isDigit()) continue
+        if (seen == digitsRight) return index + 1
+        seen++
+    }
+    return 0
+}

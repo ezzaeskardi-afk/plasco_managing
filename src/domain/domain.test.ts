@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeFa, normalizeTokens, toLatinDigits, toPersianDigits } from './normalizeFa';
 import { parseIntegerInput, parseNumberInput } from './numbers';
 import { compactParts, formatCompact, formatMoney, formatNumber } from './format';
-import { describePieces, piecesFrom, splitPieces } from './units';
+import { describePieces, cartonPieces, piecesFrom, splitPieces } from './units';
 import { stackLevel, stockAlerts, stockState, valuate } from './valuation';
 import { buildSearchIndex, searchIndex } from './search';
 import { formatProductCode, parseProductCode } from './codes';
@@ -139,6 +139,25 @@ describe('units', () => {
     expect(describePieces(28, 12, '\u06A9\u0627\u0631\u062A\u0646')).toBe('2 \u06A9\u0627\u0631\u062A\u0646 + 4');
     expect(describePieces(24, 12, '\u06A9\u0627\u0631\u062A\u0646')).toBe('2 \u06A9\u0627\u0631\u062A\u0646');
     expect(describePieces(5, 1, '\u06A9\u0627\u0631\u062A\u0646')).toBe('5');
+  });
+});
+
+describe('cartonPieces', () => {
+  it('multiplies cartons by the per-carton count and adds loose pieces', () => {
+    expect(cartonPieces(3, 24, 5)).toBe(77);
+    expect(cartonPieces(0, 24, 5)).toBe(5);
+    expect(cartonPieces(2, 12, 0)).toBe(24);
+  });
+
+  it('treats empty or unknown fields as zero', () => {
+    expect(cartonPieces(0, 0, 0)).toBe(0);
+    expect(cartonPieces(2, 0, 0)).toBe(0);
+    expect(cartonPieces(0, 24, 0)).toBe(0);
+  });
+
+  it('rounds and clamps junk to safe values', () => {
+    expect(cartonPieces(NaN, 24, -3)).toBe(0);
+    expect(cartonPieces(1.4, 10, 2.5)).toBe(13);
   });
 });
 

@@ -26,6 +26,14 @@ export function splitPieces(total: number, packSize: number): PacksAndPieces {
   return { packs: sign * Math.floor(abs / size), pieces: sign * (abs % size) };
 }
 
+/** cartons × perCarton + loose pieces. All arguments are non-negative integers. */
+export function cartonPieces(cartons: number, perCarton: number, pieces: number): number {
+  const c = Number.isFinite(cartons) ? Math.max(0, Math.round(cartons)) : 0;
+  const s = Number.isFinite(perCarton) ? Math.max(0, Math.round(perCarton)) : 0;
+  const p = Number.isFinite(pieces) ? Math.max(0, Math.round(pieces)) : 0;
+  return c * s + p;
+}
+
 /** Short Persian-ish text for a quantity, e.g. "۳ کارتن + ۴". */
 export function describePieces(total: number, packSize: number, packLabel: string): string {
   const { packs, pieces } = splitPieces(total, packSize);

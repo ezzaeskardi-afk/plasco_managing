@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { QuantityInput } from '@/components/common/QuantityInput';
+import { CartonInput } from '@/components/common/CartonInput';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Textarea } from '@/components/ui/input';
 import { EmptyState, Select } from '@/components/ui/misc';
@@ -13,7 +13,7 @@ import {
   productLevels,
   undoMovement,
 } from '@/db/movements';
-import { listLocations, listProducts } from '@/db/repos';
+import { listLocations, listProducts, updateProduct } from '@/db/repos';
 import type { MovementType } from '@/db/types';
 import { parseIntegerInput } from '@/domain/numbers';
 import { buildSearchIndex, searchIndex } from '@/domain/search';
@@ -65,6 +65,7 @@ export function StockOpPage() {
   const [locationId, setLocationId] = useState('');
   const [toLocationId, setToLocationId] = useState('');
   const [qty, setQty] = useState(0);
+  const [entryPackSize, setEntryPackSize] = useState<number | null>(null);
   const [targetQty, setTargetQty] = useState('');
   const [currentQty, setCurrentQty] = useState<number | null>(null);
   const [note, setNote] = useState('');
@@ -115,6 +116,11 @@ export function StockOpPage() {
       setCurrentQty(levels.find((l) => l.locationId === locationId)?.qty ?? 0);
     });
   }, [productId, locationId, products]);
+
+  // A «تعداد در کارتن» typed for one product must not survive to the next one.
+  useEffect(() => {
+    setEntryPackSize(null);
+  }, [product?.id]);
 
   if (!products || !locations) return <p className="text-crate">{fa.common.loading}</p>;
 
@@ -182,6 +188,15 @@ export function StockOpPage() {
         });
         toastUndo(OP_SUCCESS[op], () => undoMovement(movement.id));
         if (signed > 0) offerRemainderUndo();
+      }
+      // A «تعداد در کارتن» typed over the product's own pack size is the
+      // shopkeeper teaching the shelf: save it so the next entry pre-fills it.
+      // Product-config only - never part of the movement itself.
+      if (op !== 'adjust' && entryPackSize != null && entryPackSize >= 2 && entryPackSize !== product.packSize) {
+        await updateProduct(product.id, {
+          packSize: entryPackSize,
+          packLabel: product.packLabel === 'عدد' ? fa.units.carton : product.packLabel,
+        }).catch(() => undefined);
       }
       localStorage.setItem(LAST_LOCATION_KEY, locationId);
       navigate(`/products/${product.id}`);
@@ -299,11 +314,12 @@ export function StockOpPage() {
         </div>
       ) : (
         <div className="mb-4 rounded-input border border-line bg-paper p-4">
-          <QuantityInput
+          <CartonInput
+            key={product?.id ?? 'none'}
             value={qty}
             onChange={setQty}
             packSize={product?.packSize ?? 1}
-            packLabel={product?.packLabel ?? fa.units.carton}
+            onPerCartonChange={setEntryPackSize}
           />
         </div>
       )}

@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.plasco.managing.data.NewProduct
 import ir.plasco.managing.domain.findProductByBarcode
+import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.normalizeBarcode
 import ir.plasco.managing.domain.parseBarcodeList
 import ir.plasco.managing.domain.parseIntegerInput
@@ -55,15 +56,18 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
     val categories by container.hub.categories.collectAsStateWithLifecycle()
     val locations by container.hub.locations.collectAsStateWithLifecycle()
     val settings by container.hub.settings.collectAsStateWithLifecycle()
+    val currency = settings.currencyLabel.ifBlank { "تومان" }
 
     val existing = remember(productId, products) { products.firstOrNull { it.id == productId } }
     val key = existing?.id ?: "new"
 
     var name by remember(key) { mutableStateOf(existing?.name.orEmpty()) }
     var code by remember(key) { mutableStateOf(existing?.code.orEmpty()) }
-    var buyPrice by remember(key) { mutableStateOf(existing?.buyPrice?.toString().orEmpty()) }
-    var retailPrice by remember(key) { mutableStateOf(existing?.retailPrice?.toString().orEmpty()) }
-    var wholesale by remember(key) { mutableStateOf(existing?.wholesalePrice?.toString().orEmpty()) }
+    var buyPrice by remember(key) { mutableStateOf(existing?.buyPrice?.let { formatNumber(it) }.orEmpty()) }
+    var retailPrice by remember(key) { mutableStateOf(existing?.retailPrice?.let { formatNumber(it) }.orEmpty()) }
+    var wholesale by remember(key) {
+        mutableStateOf(existing?.wholesalePrice?.let { formatNumber(it) }.orEmpty())
+    }
     var packLabel by remember(key) { mutableStateOf(existing?.packLabel ?: "عدد") }
     var packSize by remember(key) { mutableStateOf(existing?.packSize?.toString() ?: "1") }
     var minStock by remember(key) { mutableStateOf(existing?.minStock?.toString().orEmpty()) }
@@ -170,10 +174,22 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                 // مقدار قبلی در همان state می‌ماند و بی‌تغییر دوباره فرستاده می‌شود.
                 // «کالای جدید» از خالی شروع می‌شود، پس فیلدش می‌ماند.
                 if (existing == null || !settings.costLockEnabled) {
-                    NumberField(Fa.products.buyPrice, buyPrice, { buyPrice = it })
+                    NumberField(
+                        Fa.products.buyPrice,
+                        buyPrice,
+                        { buyPrice = it },
+                        groupThousands = true,
+                        suffix = currency,
+                    )
                     Spacer(Modifier.height(8.dp))
                 }
-                NumberField(Fa.products.retailPrice, retailPrice, { retailPrice = it })
+                NumberField(
+                    Fa.products.retailPrice,
+                    retailPrice,
+                    { retailPrice = it },
+                    groupThousands = true,
+                    suffix = currency,
+                )
             }
         }
 
@@ -202,7 +218,13 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
 
         item {
             Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
-                NumberField(Fa.products.wholesalePrice, wholesale, { wholesale = it })
+                NumberField(
+                    Fa.products.wholesalePrice,
+                    wholesale,
+                    { wholesale = it },
+                    groupThousands = true,
+                    suffix = currency,
+                )
                 Spacer(Modifier.height(8.dp))
                 TextField(Fa.products.packLabel, packLabel, { packLabel = it })
                 Spacer(Modifier.height(8.dp))

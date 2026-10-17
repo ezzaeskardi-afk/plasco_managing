@@ -8,13 +8,34 @@ interface PreviewFlag {
   __PLASCO_PREVIEW__?: boolean;
 }
 
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
 /** registerType: 'prompt' - the update is applied only when the user taps it. */
 export function PwaUpdate() {
   useEffect(() => {
     // The single-file preview build has no service worker next to it.
     if ((window as unknown as PreviewFlag).__PLASCO_PREVIEW__ === true) return;
 
+    let registration: ServiceWorkerRegistration | undefined;
+
+    // A phone that lives on the home screen for days never reloads on its own,
+    // so the "update available" alarm would never ring. Ask the browser for a
+    // fresh service worker whenever the phone comes back online, returns to the
+    // app, or once an hour - the alarm itself still waits for a tap below.
+    const check = () => {
+      void registration?.update().catch(() => undefined);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    window.addEventListener('online', check);
+    document.addEventListener('visibilitychange', onVisible);
+    const interval = window.setInterval(check, CHECK_INTERVAL_MS);
+
     const updateSW = registerSW({
+      onRegisteredSW(_swUrl, swRegistration) {
+        registration = swRegistration ?? undefined;
+      },
       onNeedRefresh() {
         setWaitingUpdate(() => updateSW(true));
         // One toast at a time, and it can be closed: a toast pinned at the top
@@ -33,6 +54,12 @@ export function PwaUpdate() {
         console.warn('service worker registration failed', error);
       },
     });
+
+    return () => {
+      window.removeEventListener('online', check);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.clearInterval(interval);
+    };
   }, []);
   return null;
 }

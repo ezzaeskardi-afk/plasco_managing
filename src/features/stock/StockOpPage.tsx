@@ -201,8 +201,6 @@ export function StockOpPage() {
 
   return (
     <div className="mx-auto max-w-[720px] pb-10">
-      <h2 className="mb-4 text-title font-bold text-ink">{OP_TITLES[op] ?? fa.stock.receive}</h2>
-
       {product ? (
         <div className="mb-4 flex items-center gap-3 rounded-input border border-line bg-paper p-3">
           <ProductThumb productId={product.id} />

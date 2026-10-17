@@ -25,16 +25,24 @@ const MOVEMENTS_NAV = { to: '/movements', label: fa.nav.movements, icon: ArrowLe
 const MORE_NAV = { to: '/more', label: fa.nav.more, icon: Menu } as const;
 
 const TITLES: ReadonlyArray<readonly [string, string]> = [
+  ['/products/new', fa.products.new],
   ['/products', fa.products.title],
   ['/movements', fa.movements.title],
   ['/stocktake', fa.stocktake.title],
-  ['/stock', fa.stock.receive],
+  ['/stock/receive', fa.stock.receive],
+  ['/stock/issue', fa.stock.issue],
+  ['/stock/transfer', fa.stock.transfer],
+  ['/stock/adjust', fa.stock.adjust],
   ['/more/status', fa.status.title],
+  ['/more/data', fa.importexport.title],
+  ['/more/labels', fa.settings.labels],
+  ['/more/settings', fa.settings.title],
   ['/more', fa.nav.more],
   ['/', fa.dashboard.title],
 ];
 
 function titleFor(pathname: string): string {
+  if (pathname.endsWith('/edit')) return fa.products.edit;
   const hit = TITLES.find(([prefix]) => prefix !== '/' && pathname.startsWith(prefix));
   return hit?.[1] ?? fa.dashboard.title;
 }
@@ -117,6 +125,9 @@ export function AppShell() {
   const location = useLocation();
   const [addOpen, setAddOpen] = useState(false);
   const title = titleFor(location.pathname);
+  // The dashboard needs no title bar: «خانه» repeats what the rail and the
+  // bottom nav already mark as active, and the bar is not a link.
+  const isHome = location.pathname === '/';
 
   return (
     <div className="min-h-[100dvh] bg-frost">
@@ -133,13 +144,20 @@ export function AppShell() {
         </div>
       </aside>
 
-      <header className="safe-t sticky top-0 z-20 border-b border-line bg-frost px-4 py-3 lg:ps-64">
-        <div className="mx-auto w-full max-w-[1200px]">
-          <h1 className="text-heading font-bold text-ink">{title}</h1>
-        </div>
-      </header>
+      {isHome ? null : (
+        <header className="safe-t sticky top-0 z-20 border-b border-line bg-frost px-4 py-3 lg:ps-64">
+          <div className="mx-auto w-full max-w-[1200px]">
+            <h1 className="text-heading font-bold text-ink">{title}</h1>
+          </div>
+        </header>
+      )}
 
-      <main className="mx-auto w-full max-w-[1200px] px-4 pb-28 pt-4 lg:pb-10 lg:ps-64">
+      <main
+        className={cn(
+          'mx-auto w-full max-w-[1200px] px-4 pb-28 pt-4 lg:pb-10 lg:ps-64',
+          isHome && 'safe-t',
+        )}
+      >
         <Outlet />
       </main>
 

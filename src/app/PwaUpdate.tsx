@@ -18,7 +18,7 @@ export function PwaUpdate() {
       onNeedRefresh() {
         setWaitingUpdate(() => updateSW(true));
         // One toast at a time, and it can be closed: a toast pinned at the top
-        // covers the page title (and the search field on a phone) until it is.
+        // covers the top of the page (and the search field on a phone) until it is.
         // sonner's own close circle announces itself as the English "Close
         // toast" and cannot be relabelled through its public API, so the app
         // draws its own Persian control instead (AGENTS.md §۸).

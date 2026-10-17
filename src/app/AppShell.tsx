@@ -13,39 +13,15 @@ import {
   Truck,
 } from 'lucide-react';
 import { useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { fa } from '@/i18n/fa';
 import { cn } from '@/lib/utils';
-import { useSettings } from './settings-context';
 
 const HOME_NAV = { to: '/', label: fa.nav.home, icon: Home } as const;
 const PRODUCTS_NAV = { to: '/products', label: fa.nav.products, icon: Package } as const;
 const MOVEMENTS_NAV = { to: '/movements', label: fa.nav.movements, icon: ArrowLeftRight } as const;
 const MORE_NAV = { to: '/more', label: fa.nav.more, icon: Menu } as const;
-
-const TITLES: ReadonlyArray<readonly [string, string]> = [
-  ['/products/new', fa.products.new],
-  ['/products', fa.products.title],
-  ['/movements', fa.movements.title],
-  ['/stocktake', fa.stocktake.title],
-  ['/stock/receive', fa.stock.receive],
-  ['/stock/issue', fa.stock.issue],
-  ['/stock/transfer', fa.stock.transfer],
-  ['/stock/adjust', fa.stock.adjust],
-  ['/more/status', fa.status.title],
-  ['/more/data', fa.importexport.title],
-  ['/more/labels', fa.settings.labels],
-  ['/more/settings', fa.settings.title],
-  ['/more', fa.nav.more],
-  ['/', fa.dashboard.title],
-];
-
-function titleFor(pathname: string): string {
-  if (pathname.endsWith('/edit')) return fa.products.edit;
-  const hit = TITLES.find(([prefix]) => prefix !== '/' && pathname.startsWith(prefix));
-  return hit?.[1] ?? fa.dashboard.title;
-}
 
 const ADD_ACTIONS = [
   { label: fa.products.new, icon: PackagePlus, to: '/products/new' },
@@ -121,20 +97,13 @@ function AddSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: 
 }
 
 export function AppShell() {
-  const { settings } = useSettings();
-  const location = useLocation();
   const [addOpen, setAddOpen] = useState(false);
-  const title = titleFor(location.pathname);
-  // The dashboard needs no title bar: «خانه» repeats what the rail and the
-  // bottom nav already mark as active, and the bar is not a link.
-  const isHome = location.pathname === '/';
 
   return (
     <div className="min-h-[100dvh] bg-frost">
       <aside className="fixed inset-y-0 start-0 z-30 hidden w-60 flex-col gap-2 border-e border-line bg-paper p-4 lg:flex">
         <div className="mb-2 flex items-center gap-2 px-3 py-2">
           <Box className="size-6 text-basin" />
-          <span className="font-bold text-ink">{settings.shopName || fa.app.name}</span>
         </div>
         {[HOME_NAV, PRODUCTS_NAV, MOVEMENTS_NAV, MORE_NAV].map((item) => (
           <RailLink key={item.to} {...item} />
@@ -144,20 +113,10 @@ export function AppShell() {
         </div>
       </aside>
 
-      {isHome ? null : (
-        <header className="safe-t sticky top-0 z-20 border-b border-line bg-frost px-4 py-3 lg:ps-64">
-          <div className="mx-auto w-full max-w-[1200px]">
-            <h1 className="text-heading font-bold text-ink">{title}</h1>
-          </div>
-        </header>
-      )}
-
-      <main
-        className={cn(
-          'mx-auto w-full max-w-[1200px] px-4 pb-28 pt-4 lg:pb-10 lg:ps-64',
-          isHome && 'safe-t',
-        )}
-      >
+      {/* No page-title bar anywhere: the user asked for no name at the top of
+          any page — the rail, the bottom nav and the content already say where
+          you are (§11.23). */}
+      <main className="safe-t mx-auto w-full max-w-[1200px] px-4 pb-28 pt-4 lg:pb-10 lg:ps-64">
         <Outlet />
       </main>
 

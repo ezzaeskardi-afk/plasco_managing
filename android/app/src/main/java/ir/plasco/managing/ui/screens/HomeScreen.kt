@@ -42,7 +42,6 @@ private const val ALERT_LIMIT = 5
 @Composable
 fun HomeScreen(
     onOpenProduct: (ID) -> Unit,
-    onOpenMovements: () -> Unit,
     onNewMovement: () -> Unit,
 ) {
     val container = LocalAppContainer.current
@@ -134,13 +133,7 @@ fun HomeScreen(
         }
 
         item {
-            SectionTitle(
-                Fa.home.lowTitle,
-                Modifier.padding(horizontal = 12.dp),
-                trailing = {
-                    Button(onClick = onOpenMovements) { Text(Fa.common.more) }
-                },
-            )
+            SectionTitle(Fa.home.lowTitle, Modifier.padding(horizontal = 12.dp))
         }
         val low = alerts.first
         if (low.isEmpty()) {

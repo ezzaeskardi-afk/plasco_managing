@@ -65,14 +65,12 @@ fun Panel(
 }
 
 @Composable
-fun SectionTitle(title: String, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
-    Row(
+fun SectionTitle(title: String, modifier: Modifier = Modifier) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleMedium,
         modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        trailing?.invoke()
-    }
+    )
 }
 
 /** عدد درشت؛ با یک لمس بین جمع‌وجور و کامل عوض می‌شود. */

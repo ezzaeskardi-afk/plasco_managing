@@ -46,7 +46,9 @@ class PhotoStore(private val helper: PlascoDb, private val hub: DataHub) {
         val key = cacheKey(productId, stamp, full)
         cache.get(key)?.let { return it }
         val bitmap = withContext(Dispatchers.IO) { readBitmap(productId, full) }
-        if (bitmap != null) cache.put(key, bitmap)
+        // فقط بندانگشتی‌ها در حافظه می‌مانند؛ عکس کامل هر بار از دیتابیس خوانده
+        // می‌شود تا چند عکس ۸۰۰ پیکسلی چند صد مگابایت رم نگیرد.
+        if (bitmap != null && !full) cache.put(key, bitmap)
         return bitmap
     }
 

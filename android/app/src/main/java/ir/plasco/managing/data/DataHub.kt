@@ -32,6 +32,13 @@ class DataHub(private val helper: PlascoDb) {
     private val _movements = MutableStateFlow<List<Movement>>(emptyList())
     val movements: StateFlow<List<Movement>> = _movements.asStateFlow()
 
+    /**
+     * تعداد کل حرکات در دیتابیس؛ `movements` فقط چند تای آخر را نگه می‌دارد
+     * (نیازِ فهرست)، ولی صفحهٔ بکاپ باید عدد واقعی را نشان دهد.
+     */
+    private val _movementCount = MutableStateFlow(0)
+    val movementCount: StateFlow<Int> = _movementCount.asStateFlow()
+
     private val _brands = MutableStateFlow<List<Brand>>(emptyList())
     val brands: StateFlow<List<Brand>> = _brands.asStateFlow()
 
@@ -64,6 +71,7 @@ class DataHub(private val helper: PlascoDb) {
         _products.value = readProducts(db)
         _levels.value = readLevels(db)
         _movements.value = readMovements(db)
+        _movementCount.value = readMovementCount(db)
         _settings.value = readSettings(db)
         _stockTakes.value = readStockTakes(db)
         _photoStamps.value = readPhotoStamps(db)
@@ -81,6 +89,7 @@ class DataHub(private val helper: PlascoDb) {
         val db = helper.readableDatabase
         _levels.value = readLevels(db)
         _movements.value = readMovements(db)
+        _movementCount.value = readMovementCount(db)
     }
 
     suspend fun reloadLabels() = withContext(Dispatchers.IO) {
@@ -133,6 +142,11 @@ class DataHub(private val helper: PlascoDb) {
     private fun readMovements(db: android.database.sqlite.SQLiteDatabase): List<Movement> =
         db.rawQuery("SELECT * FROM movements ORDER BY at DESC LIMIT $MOVEMENT_PAGE", null).use { cursor ->
             buildList { while (cursor.moveToNext()) add(cursor.toMovement()) }
+        }
+
+    private fun readMovementCount(db: android.database.sqlite.SQLiteDatabase): Int =
+        db.rawQuery("SELECT COUNT(*) FROM movements", null).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getInt(0) else 0
         }
 
     private fun readSettings(db: android.database.sqlite.SQLiteDatabase): Settings =

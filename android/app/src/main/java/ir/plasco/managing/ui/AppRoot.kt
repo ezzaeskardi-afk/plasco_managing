@@ -1,5 +1,8 @@
 package ir.plasco.managing.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -130,11 +134,17 @@ fun AppRoot(container: AppContainer) {
                             navController = navController,
                             startDestination = Routes.Home,
                             modifier = Modifier.padding(padding),
+                            // پیش‌فرضِ navigation-compose یک محو شدن ۷۰۰ میلی‌ثانیه‌ای است که
+                            // جابه‌جایی بین تب‌ها را کند نشان می‌دهد؛ محو کوتاه ۱۵۰ms همان
+                            // حس «فوری» را می‌دهد و هدفِ جابه‌جایی سریع بین صفحه‌ها را می‌رساند.
+                            enterTransition = { fadeIn(tween(150)) },
+                            exitTransition = { fadeOut(tween(150)) },
+                            popEnterTransition = { fadeIn(tween(150)) },
+                            popExitTransition = { fadeOut(tween(150)) },
                         ) {
                             composable(Routes.Home) {
                                 HomeScreen(
                                     onOpenProduct = { id -> navController.navigate(Routes.productEdit(id)) },
-                                    onOpenMovements = { navController.navigate(Routes.Movements) },
                                     onNewMovement = { navController.navigate(Routes.movementNew()) },
                                 )
                             }
@@ -209,7 +219,13 @@ private fun BottomBar(navController: NavHostController, route: String?) {
     )
     NavigationBar {
         tabs.forEach { tab ->
-            val selected = route == tab.route || (tab.route == Routes.Products && route == Routes.ProductEdit)
+            val selected = when (tab.route) {
+                Routes.Products ->
+                    route == Routes.Products || route == Routes.ProductNew || route == Routes.ProductEdit
+                Routes.MovementNew -> route?.startsWith(Routes.MovementNew) == true
+                Routes.More -> route == Routes.More || route == Routes.Data
+                else -> route == tab.route
+            }
             NavigationBarItem(
                 selected = selected,
                 onClick = {
@@ -217,9 +233,12 @@ private fun BottomBar(navController: NavHostController, route: String?) {
                         // تپ‌های پیاپی «＋» نباید چند فرم خالی روی هم بچیند.
                         navController.navigate(Routes.movementNew()) { launchSingleTop = true }
                     } else {
+                        // هر تب وضعیت خودش (اسکرول و جست‌وجو) را نگه می‌دارد؛
+                        // برگشت به تب قبلی همان لحظه می‌آید، نه از صفر.
                         navController.navigate(tab.route) {
-                            popUpTo(Routes.Home) { inclusive = tab.route == Routes.Home }
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
+                            restoreState = true
                         }
                     }
                 },

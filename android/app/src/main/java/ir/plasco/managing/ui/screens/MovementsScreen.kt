@@ -86,7 +86,7 @@ fun MovementsScreen(onNewMovement: () -> Unit, onOpenProduct: (ID) -> Unit) {
                     Text(
                         (if (movement.qty > 0) "+" else "−") + formatNumber(if (movement.qty > 0) movement.qty else -movement.qty),
                         fontWeight = FontWeight.Bold,
-                        color = movementTone(movement.type),
+                        color = movementTone(movement.qty),
                     )
                 }
                 Spacer(Modifier.width(4.dp))

@@ -9,3 +9,10 @@ keystore.properties
 *.iml
 .idea/
 .cxx/
+
+# فایل‌های موقتی آزمایش روی شبیه‌ساز (عکس صفحه، دامپ UI، دیتابیس کشیده‌شده)
+scr-*.png
+dump.xml
+*.sqlite
+plasco-managing.db*
+

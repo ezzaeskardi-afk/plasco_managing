@@ -21,6 +21,7 @@ object Fa {
         const val back = "برگشت"
         const val none = "—"
         const val all = "همه"
+        const val lockedValue = "•••"
     }
 
     object nav {
@@ -135,8 +136,10 @@ object Fa {
         const val counted = "شمارش‌شده"
         const val apply = "اعمال شمارش"
         const val applyHint = "برای هر کالایی که شمردی اختلاف حساب می‌شود و حرکات شمارش ثبت می‌شود."
+        const val applyConfirm = "تعداد {count} کالا اصلاح می‌شود. مطمئنی؟"
         const val applied = "شمارش اعمال شد"
         const val revert = "بازگردانی اعمال"
+        const val revertConfirm = "این شمارش برگردانده می‌شود و دوباره باز می‌شود. مطمئنی؟"
         const val reverted = "شمارش برگردانده شد"
         const val uncounted = "نشمرده"
         const val history = "شمارش‌های گذشته"
@@ -169,7 +172,8 @@ object Fa {
         const val newCategory = "دستهٔ تازه"
         const val newLocation = "مکان تازه"
         const val name = "نام"
-        const val remove = "حذف"
+        const val removeConfirm = "«{name}» حذف شود؟"
+        const val removed = "حذف شد"
         const val data = "داده‌ها و بکاپ"
         const val dataHint = "فایل بکاپ ZIP بساز و همان فایل نسخهٔ وب را هم اینجا باز کن."
         const val lastBackup = "آخرین بکاپ"
@@ -177,8 +181,8 @@ object Fa {
         const val about = "درباره"
         const val aboutBody =
             "نسخهٔ اندروید پلاسکو منیجینگ. همهٔ داده‌ها روی خود گوشی می‌مانند و برنامه به اینترنت نیازی ندارد."
-        const val costLock = "پنهان‌کردن قیمت خرید"
-        const val costLockHint = "برای کارمند؛ فقط نمایشی است."
+        const val costLock = "پنهان‌کردن قیمت خرید و سود"
+        const val costLockHint = "برای کارمند؛ فقط نمایشی است، رمز واقعی نیست."
         const val dataOnDevice = "داده‌ها روی همین گوشی ذخیره می‌شوند."
     }
 

@@ -67,6 +67,8 @@ fun StockTakeScreen(onBack: () -> Unit) {
     var scanOpen by remember { mutableStateOf(false) }
     var scanTarget by remember { mutableStateOf<Product?>(null) }
     var scanCount by remember { mutableStateOf("") }
+    var confirmApply by remember { mutableStateOf(false) }
+    var revertId by remember { mutableStateOf<ID?>(null) }
 
     val active = remember(products) { products.filter { it.active } }
     val atLocation = remember(levels, locationId) {
@@ -92,6 +94,34 @@ fun StockTakeScreen(onBack: () -> Unit) {
         scanTarget = null
         showMessage(Fa.stocktake.scanned)
         if (next) scanOpen = true
+    }
+
+    // اعمال و بازگردانی مثل نسخهٔ وب اول پرسش «مطمئنی؟» دارند؛ اعمال تعداد کالاهای
+    // متغیر را می‌گوید و بازگردانی هم توضیح می‌دهد که جلسه دوباره «باز» می‌شود.
+    fun applyCounts() {
+        busy = true
+        scope.launch {
+            try {
+                container.stock.applyStockTake(locationId, counted)
+                showMessage(Fa.stocktake.applied)
+                counts.clear()
+            } catch (error: Throwable) {
+                showMessage(messageFor(error))
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun revertTake(id: ID) {
+        scope.launch {
+            try {
+                container.stock.revertStockTake(id)
+                showMessage(Fa.stocktake.reverted)
+            } catch (error: Throwable) {
+                showMessage(messageFor(error))
+            }
+        }
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -158,20 +188,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Button(
                     enabled = !busy && counted.isNotEmpty(),
-                    onClick = {
-                        busy = true
-                        scope.launch {
-                            try {
-                                container.stock.applyStockTake(locationId, counted)
-                                showMessage(Fa.stocktake.applied)
-                                counts.clear()
-                            } catch (error: Throwable) {
-                                showMessage(messageFor(error))
-                            } finally {
-                                busy = false
-                            }
-                        }
-                    },
+                    onClick = { confirmApply = true },
                 ) { Text(Fa.stocktake.apply) }
             }
         }
@@ -200,16 +217,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
                     }
                     if (take.status == StockTakeStatus.Applied) {
                         OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    try {
-                                        container.stock.revertStockTake(take.id)
-                                        showMessage(Fa.stocktake.reverted)
-                                    } catch (error: Throwable) {
-                                        showMessage(messageFor(error))
-                                    }
-                                }
-                            },
+                            onClick = { revertId = take.id },
                         ) { Text(Fa.stocktake.revert) }
                     }
                 }
@@ -270,6 +278,41 @@ fun StockTakeScreen(onBack: () -> Unit) {
             },
             confirmButton = { TextButton(onClick = { saveScan(next = false) }) { Text(Fa.common.save) } },
             dismissButton = { TextButton(onClick = { saveScan(next = true) }) { Text(Fa.stocktake.scanNext) } },
+        )
+    }
+
+    if (confirmApply) {
+        AlertDialog(
+            onDismissRequest = { confirmApply = false },
+            title = { Text(Fa.common.confirm) },
+            text = { Text(Fa.stocktake.applyConfirm.replace("{count}", formatNumber(changes))) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmApply = false
+                        applyCounts()
+                    },
+                ) { Text(Fa.stocktake.apply) }
+            },
+            dismissButton = { TextButton(onClick = { confirmApply = false }) { Text(Fa.common.cancel) } },
+        )
+    }
+
+    val pendingRevert = revertId
+    if (pendingRevert != null) {
+        AlertDialog(
+            onDismissRequest = { revertId = null },
+            title = { Text(Fa.common.confirm) },
+            text = { Text(Fa.stocktake.revertConfirm) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        revertId = null
+                        revertTake(pendingRevert)
+                    },
+                ) { Text(Fa.stocktake.revert) }
+            },
+            dismissButton = { TextButton(onClick = { revertId = null }) { Text(Fa.common.cancel) } },
         )
     }
 }

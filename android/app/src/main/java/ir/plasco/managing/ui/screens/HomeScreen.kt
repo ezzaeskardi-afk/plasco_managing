@@ -88,8 +88,8 @@ fun HomeScreen(
                     KpiBlock(Fa.home.sku, valuation.productCount.toLong(), Modifier.weight(1f))
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    KpiBlock(Fa.home.costValue, valuation.cost, Modifier.weight(1f))
-                    KpiBlock(Fa.home.retailValue, valuation.retail, Modifier.weight(1f))
+                    KpiBlock(Fa.home.costValue, valuation.cost, Modifier.weight(1f), locked = settings.costLockEnabled)
+                    KpiBlock(Fa.home.retailValue, valuation.retail, Modifier.weight(1f), locked = settings.costLockEnabled)
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -99,8 +99,13 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
+                    // قفل قیمت (مثل نسخهٔ وب): عددهای پولی پنهان می‌شوند؛ «تعداد» و «چند نوع» می‌مانند.
                     Text(
-                        formatMoney(valuation.potentialProfit.toInt(), settings.currencyLabel),
+                        if (settings.costLockEnabled) {
+                            Fa.common.lockedValue
+                        } else {
+                            formatMoney(valuation.potentialProfit.toInt(), settings.currencyLabel)
+                        },
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
                         color = toneColor(StockState.Ok),

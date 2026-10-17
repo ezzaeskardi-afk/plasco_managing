@@ -13,12 +13,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.plasco.managing.domain.ProductSearchIndex
 import ir.plasco.managing.domain.productTotals
-import ir.plasco.managing.domain.searchProducts
 import ir.plasco.managing.model.ID
 import ir.plasco.managing.ui.Fa
 import ir.plasco.managing.ui.LocalAppContainer
@@ -33,13 +34,17 @@ fun ProductsScreen(onOpenProduct: (ID) -> Unit, onNewProduct: () -> Unit) {
     val levels by container.hub.levels.collectAsStateWithLifecycle()
     val brands by container.hub.brands.collectAsStateWithLifecycle()
     val categories by container.hub.categories.collectAsStateWithLifecycle()
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
 
     val totals = remember(levels) { productTotals(levels) }
     val brandNames = remember(brands) { brands.associate { it.id to it.name } }
     val categoryNames = remember(categories) { categories.associate { it.id to it.name } }
-    val results = remember(query, products, brandNames, categoryNames) {
-        searchProducts(query, products, brandNames, categoryNames).map { it.product }
+    val index = remember(products, brandNames, categoryNames) {
+        ProductSearchIndex(products, brandNames, categoryNames)
+    }
+    // بدون پرس‌وجو همهٔ کالاها نشان داده می‌شوند (قبلاً بی‌سروصدا به ۲۰۰ تا بریده می‌شد).
+    val results = remember(query, index) {
+        if (query.isBlank()) index.all() else index.search(query).map { it.product }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {

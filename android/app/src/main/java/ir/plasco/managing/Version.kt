@@ -1,7 +1,7 @@
 package ir.plasco.managing
 
 /** نسخهٔ نمایشی برنامه — با versionName در app/build.gradle.kts یکی بماند. */
-const val APP_VERSION = "1.2.1"
+const val APP_VERSION = "1.2.2"
 
 /** نسخهٔ جدول‌های دیتابیس (PlascoDb.VERSION). */
 const val SCHEMA_VERSION = 2

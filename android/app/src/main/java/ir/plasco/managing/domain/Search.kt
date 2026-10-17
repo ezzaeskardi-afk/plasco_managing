@@ -28,37 +28,58 @@ fun searchProducts(
     brandNames: Map<ID, String> = emptyMap(),
     categoryNames: Map<ID, String> = emptyMap(),
     limit: Int = 200,
-): List<SearchHit> {
-    val tokens = normalizeTokens(query)
-    val normalizedQuery = normalizeFa(query)
-    val collator = persianCollator()
-    if (tokens.isEmpty()) {
-        return products.sortedWith { a, b -> collator.compare(a.name, b.name) }.take(limit)
-            .map { SearchHit(it, 0) }
-    }
+): List<SearchHit> = ProductSearchIndex(products, brandNames, categoryNames).search(query, limit)
 
-    val hits = mutableListOf<SearchHit>()
-    for (product in products) {
-        var score = -1
-        if (normalizeFa(product.code) == normalizedQuery ||
-            product.barcodes.any { normalizeFa(it) == normalizedQuery }
-        ) {
-            score = 100
-        } else {
-            val text = entryText(product, brandNames[product.brandId], categoryNames[product.categoryId])
-            if (text.startsWith(normalizedQuery)) {
-                score = 50
-            } else if (tokens.all { text.contains(it) }) {
-                score = 10
-            } else if (product.barcodes.any { code -> code.contains(normalizedQuery) }) {
-                score = 40
-            }
-        }
-        if (score >= 0) hits += SearchHit(product, score)
+/**
+ * ایندکس جست‌وجو: متن یکسان‌سازی‌شدهٔ هر کالا یک بار ساخته می‌شود و بین تایپ‌ها
+ * بازاستفاده می‌شود. جست‌وجوی سرِ هر کلید قبلاً متن همهٔ کالاها را از نو می‌ساخت
+ * و روی چند هزار کالا تایپ را کند می‌کرد.
+ */
+class ProductSearchIndex(
+    products: List<Product>,
+    brandNames: Map<ID, String> = emptyMap(),
+    categoryNames: Map<ID, String> = emptyMap(),
+) {
+    private val texts: Map<ID, String> = products.associate {
+        it.id to entryText(it, brandNames[it.brandId], categoryNames[it.categoryId])
     }
-    hits.sortWith(
-        compareByDescending<SearchHit> { it.score }
-            .thenComparator { a, b -> collator.compare(a.product.name, b.product.name) },
-    )
-    return hits.take(limit)
+    // Collator فقط رشته مقایسه می‌کند، پس نام از هر کالا انتخاب می‌شود.
+    private val sorted: List<Product> = products.sortedWith(compareBy(persianCollator()) { it.name })
+
+    /** فهرست کامل کالاها با ترتیب نام (برای وقتی پرس‌وجویی تایپ نشده). */
+    fun all(): List<Product> = sorted
+
+    fun search(query: String, limit: Int = Int.MAX_VALUE): List<SearchHit> {
+        val tokens = normalizeTokens(query)
+        val normalizedQuery = normalizeFa(query)
+        val collator = persianCollator()
+        if (tokens.isEmpty()) {
+            return sorted.take(limit).map { SearchHit(it, 0) }
+        }
+
+        val hits = mutableListOf<SearchHit>()
+        for (product in sorted) {
+            var score = -1
+            if (normalizeFa(product.code) == normalizedQuery ||
+                product.barcodes.any { normalizeFa(it) == normalizedQuery }
+            ) {
+                score = 100
+            } else {
+                val text = texts[product.id].orEmpty()
+                if (text.startsWith(normalizedQuery)) {
+                    score = 50
+                } else if (tokens.all { text.contains(it) }) {
+                    score = 10
+                } else if (product.barcodes.any { code -> code.contains(normalizedQuery) }) {
+                    score = 40
+                }
+            }
+            if (score >= 0) hits += SearchHit(product, score)
+        }
+        hits.sortWith(
+            compareByDescending<SearchHit> { it.score }
+                .thenComparator { a, b -> collator.compare(a.product.name, b.product.name) },
+        )
+        return hits.take(limit)
+    }
 }

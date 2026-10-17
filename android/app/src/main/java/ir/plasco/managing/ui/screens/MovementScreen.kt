@@ -30,8 +30,8 @@ import ir.plasco.managing.domain.findProductByBarcode
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.parseIntegerInput
 import ir.plasco.managing.domain.piecesFrom
+import ir.plasco.managing.domain.ProductSearchIndex
 import ir.plasco.managing.domain.productTotals
-import ir.plasco.managing.domain.searchProducts
 import ir.plasco.managing.model.MovementType
 import ir.plasco.managing.ui.Fa
 import ir.plasco.managing.ui.LocalAppContainer
@@ -86,8 +86,9 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
 
     val selected = products.firstOrNull { it.id == productId }
     val brandNames = remember(brands) { brands.associate { it.id to it.name } }
-    val results = remember(query, products, brandNames) {
-        if (query.isBlank()) emptyList() else searchProducts(query, products, brandNames, emptyMap(), PICKER_LIMIT).map { it.product }
+    val index = remember(products, brandNames) { ProductSearchIndex(products, brandNames) }
+    val results = remember(query, index) {
+        if (query.isBlank()) emptyList() else index.search(query, PICKER_LIMIT).map { it.product }
     }
     val totals = remember(levels) { productTotals(levels) }
     val qtyAtLocation = levels.firstOrNull { it.productId == productId && it.locationId == locationId }?.qty ?: 0

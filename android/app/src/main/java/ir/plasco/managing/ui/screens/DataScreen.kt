@@ -55,7 +55,7 @@ fun DataScreen(onBack: () -> Unit) {
     val showMessage = LocalShowMessage.current
     val settings by container.hub.settings.collectAsStateWithLifecycle()
     val products by container.hub.products.collectAsStateWithLifecycle()
-    val movements by container.hub.movements.collectAsStateWithLifecycle()
+    val movementCount by container.hub.movementCount.collectAsStateWithLifecycle()
     val photoStamps by container.hub.photoStamps.collectAsStateWithLifecycle()
 
     var pending by remember { mutableStateOf<PendingRestore?>(null) }
@@ -147,7 +147,7 @@ fun DataScreen(onBack: () -> Unit) {
                 )
                 Text(
                     "${formatNumber(products.size)} کالا · ${formatNumber(photoStamps.size)} عکس · " +
-                        "${formatNumber(movements.size)} حرکت",
+                        "${formatNumber(movementCount)} حرکت",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -30,7 +30,6 @@ import ir.plasco.managing.domain.parseBarcodeList
 import ir.plasco.managing.domain.parseIntegerInput
 import ir.plasco.managing.domain.piecesFrom
 import ir.plasco.managing.model.ID
-import ir.plasco.managing.model.Product
 import ir.plasco.managing.ui.Fa
 import ir.plasco.managing.ui.LocalAppContainer
 import ir.plasco.managing.ui.LocalShowMessage
@@ -55,6 +54,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
     val brands by container.hub.brands.collectAsStateWithLifecycle()
     val categories by container.hub.categories.collectAsStateWithLifecycle()
     val locations by container.hub.locations.collectAsStateWithLifecycle()
+    val settings by container.hub.settings.collectAsStateWithLifecycle()
 
     val existing = remember(productId, products) { products.firstOrNull { it.id == productId } }
     val key = existing?.id ?: "new"
@@ -166,8 +166,13 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 TextField(Fa.products.code, code, { code = it }, supporting = Fa.products.codeHint)
                 Spacer(Modifier.height(8.dp))
-                NumberField(Fa.products.buyPrice, buyPrice, { buyPrice = it })
-                Spacer(Modifier.height(8.dp))
+                // قفل قیمت (مثل نسخهٔ وب): فقط در ویرایشِ کالای موجود پنهان می‌شود؛
+                // مقدار قبلی در همان state می‌ماند و بی‌تغییر دوباره فرستاده می‌شود.
+                // «کالای جدید» از خالی شروع می‌شود، پس فیلدش می‌ماند.
+                if (existing == null || !settings.costLockEnabled) {
+                    NumberField(Fa.products.buyPrice, buyPrice, { buyPrice = it })
+                    Spacer(Modifier.height(8.dp))
+                }
                 NumberField(Fa.products.retailPrice, retailPrice, { retailPrice = it })
             }
         }
@@ -353,6 +358,3 @@ internal fun messageFor(error: Throwable): String = when {
     error.message?.contains("StockTakeEmpty") == true -> Fa.stocktake.nothingCounted
     else -> error.message ?: Fa.errors.failed
 }
-
-/** کالایی که در فرم‌های دیگر لازم می‌شود. */
-internal fun findProduct(products: List<Product>, id: ID?): Product? = id?.let { key -> products.firstOrNull { it.id == key } }

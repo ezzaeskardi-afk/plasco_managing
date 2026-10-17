@@ -45,6 +45,7 @@ import ir.plasco.managing.domain.stackLevel
 import ir.plasco.managing.domain.stockState
 import ir.plasco.managing.model.MovementType
 import ir.plasco.managing.model.Product
+import ir.plasco.managing.ui.Fa
 import ir.plasco.managing.ui.theme.toneColor
 
 /** سطح آرام برای فرم‌ها و فهرست‌ها؛ بدون سایه. */
@@ -73,22 +74,26 @@ fun SectionTitle(title: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** عدد درشت؛ با یک لمس بین جمع‌وجور و کامل عوض می‌شود. */
+/** عدد درشت؛ با یک لمس بین جمع‌وجور و کامل عوض می‌شود. با `locked` جای عدد «•••» می‌آید (قفل قیمت). */
 @Composable
-fun KpiBlock(label: String, value: Long, modifier: Modifier = Modifier) {
+fun KpiBlock(label: String, value: Long, modifier: Modifier = Modifier, locked: Boolean = false) {
     var full by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .clickable { full = !full }
+            .clickable(enabled = !locked) { full = !full }
             .padding(6.dp),
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            text = if (full) formatNumber(value) else formatCompact(value),
+            text = when {
+                locked -> Fa.common.lockedValue
+                full -> formatNumber(value)
+                else -> formatCompact(value)
+            },
             fontSize = 28.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = if (locked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

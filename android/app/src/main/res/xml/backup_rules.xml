@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    اندروید ۱۱ و پایین‌تر: allowBackup خاموش است و این فایل هم صریحاً همه‌چیز را
+    کنار می‌گذارد؛ روی ۱۲+ همان data_extraction_rules کار می‌کند.
+    راه بکاپ فقط فایل ZIP خود برنامه است («بیشتر ← داده‌ها و بکاپ»).
+-->
+<full-backup-content>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

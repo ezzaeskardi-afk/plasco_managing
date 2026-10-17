@@ -14,10 +14,15 @@
         بکاپ ابری گوگل خاموش است: دادهٔ مغازه باید روی خود گوشی بماند و راه بکاپ
         همان فایل ZIP خود برنامه است (بخش ۹ شیوه‌نامه). با allowBackup روشن،
         اندروید دیتابیس کامل فروشگاه را در حساب گوگل کاربر کپی می‌کرد.
+        اندروید ۱۲+ جای allowBackup فایل dataExtractionRules را می‌خواند؛ آنجا هم
+        هم بکاپ ابری و هم انتقال دستگاه‌به‌دستگاه بسته شده است و برای اندروید ۱۱
+        و پایین‌تر هم fullBackupContent صریحاً همه‌چیز را کنار می‌گذارد.
     -->
     <application
         android:name=".PlascoApp"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"

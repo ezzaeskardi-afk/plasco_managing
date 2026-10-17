@@ -283,18 +283,16 @@ fun movementLabel(type: MovementType): String = when (type) {
     MovementType.Damage -> "خرابی"
 }
 
-/** رنگ عدد حرکت: ورود سبز، خروج قرمز. */
+/**
+ * رنگ عدد حرکت — درست مثل نسخهٔ وب (`features/stock/labels.ts`) با **علامت تعداد**
+ * تعیین می‌شود: ورود سبز، خروج قرمز، صفر بی‌رنگ. قبلاً بر اساس نوع محاسبه می‌شد و
+ * «برگشت به فروشنده»، «موجودی اولیه» و تعدیل/شمارش با اختلاف مثبت رنگ درست نمی‌گرفتند.
+ */
 @Composable
-fun movementTone(type: MovementType): Color {
+fun movementTone(qty: Int): Color {
     return when {
-        // «برگشت به فروشنده» هم خروجی است و مثل نسخهٔ وب قرمز نشان داده می‌شود.
-        type == MovementType.Sale || type == MovementType.Damage ||
-            type == MovementType.TransferOut || type == MovementType.ReturnOut ->
-            toneColor(ir.plasco.managing.model.StockState.Out)
-        type == MovementType.TransferIn ->
-            toneColor(ir.plasco.managing.model.StockState.Ok)
-        type == MovementType.Receive || type == MovementType.ReturnIn ->
-            toneColor(ir.plasco.managing.model.StockState.Ok)
-        else -> MaterialTheme.colorScheme.onSurface
+        qty > 0 -> toneColor(ir.plasco.managing.model.StockState.Ok)
+        qty < 0 -> toneColor(ir.plasco.managing.model.StockState.Out)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 }

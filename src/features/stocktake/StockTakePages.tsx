@@ -1,9 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ClipboardList, Plus, ScanLine, Search } from 'lucide-react';
+import { ClipboardList, Minus, Plus, ScanLine, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { StockStack } from '@/components/common/StockStack';
+import { StepButton } from '@/components/common/QuantityInput';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { EmptyState, Select, Switch } from '@/components/ui/misc';
@@ -284,6 +285,12 @@ export function StockTakeCountPage() {
 
   const existingScanCount = scanTarget ? countedMap.get(scanTarget.id) : undefined;
 
+  // Same «−۱ / +۱» steppers as the phone's scan dialog; the minus clamps at zero.
+  const bumpScan = (delta: number) => {
+    const value = Math.max(0, (parseIntegerInput(scanDraft) ?? 0) + delta);
+    setScanDraft(String(value));
+  };
+
   return (
     <div className="mx-auto max-w-[860px] pb-10">
       <div className="mb-3">
@@ -446,6 +453,16 @@ export function StockTakeCountPage() {
                 onChange={(event) => setScanDraft(event.target.value)}
                 placeholder="۰"
               />
+              <div className="mt-2 flex items-center gap-2">
+                <StepButton label={fa.stocktake.counted} onClick={() => bumpScan(-1)}>
+                  <Minus className="size-4" />
+                  <span className="tnum">۱</span>
+                </StepButton>
+                <StepButton label={fa.stocktake.counted} onClick={() => bumpScan(1)}>
+                  <Plus className="size-4" />
+                  <span className="tnum">۱</span>
+                </StepButton>
+              </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button className="flex-1" onClick={() => void saveScan(false)}>

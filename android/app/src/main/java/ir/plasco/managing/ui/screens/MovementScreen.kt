@@ -140,7 +140,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
             return
         }
         if (qty == 0) {
-            showMessage(Fa.movements.notEnough)
+            showMessage(Fa.movements.enterQty)
             return
         }
         busy = true
@@ -327,7 +327,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
         item {
             Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                 Button(onClick = { submit() }, enabled = !busy) {
-                    Text(Fa.movements.newMovement)
+                    Text(action.label)
                 }
             }
         }

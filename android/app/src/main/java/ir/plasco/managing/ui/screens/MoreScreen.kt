@@ -95,7 +95,7 @@ fun MoreScreen(onOpenStockTake: () -> Unit, onOpenData: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Text(Fa.more.textScale, style = MaterialTheme.typography.labelMedium)
                 ChipRow(
-                    options = listOf("1.0" to "معمولی", "1.15" to "بزرگ", "1.3" to "خیلی بزرگ"),
+                    options = listOf("1.0" to Fa.more.scaleNormal, "1.15" to Fa.more.scaleLarge, "1.3" to Fa.more.scaleHuge),
                     selected = settings.textScale.toString(),
                     onSelect = { value ->
                         scope.launch {
@@ -133,7 +133,7 @@ fun MoreScreen(onOpenStockTake: () -> Unit, onOpenData: () -> Unit) {
                             container.settings.update { current ->
                                 current.copy(shopName = shopName.trim(), currencyLabel = currency.trim())
                             }
-                            showMessage("تنظیمات ذخیره شد")
+                            showMessage(Fa.more.settingsSaved)
                         }
                     },
                 ) { Text(Fa.common.save) }

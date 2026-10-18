@@ -1,7 +1,7 @@
 {
   "name": "plasco-managing",
   "private": true,
-  "version": "1.2.7",
+  "version": "1.2.8",
   "type": "module",
   "description": "Offline-first inventory PWA for a plastic-goods shop (retail + wholesale).",
   "scripts": {

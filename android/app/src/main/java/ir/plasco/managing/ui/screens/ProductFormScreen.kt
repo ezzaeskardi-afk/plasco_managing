@@ -415,7 +415,7 @@ internal fun messageFor(error: Throwable): String = when {
     error.message?.contains("DuplicateProductCode") == true -> Fa.errors.duplicateCode
     error.message?.contains("ProductCodeExhausted") == true -> Fa.errors.codeExhausted
     error.message?.contains("InsufficientStock") == true -> Fa.errors.insufficient
-    error.message?.contains("MovementQtyMustBeNonZero") == true -> Fa.movements.notEnough
+    error.message?.contains("MovementQtyMustBeNonZero") == true -> Fa.movements.enterQty
     error.message?.contains("AlreadyUndone") == true -> Fa.errors.alreadyUndone
     error.message?.contains("TransferSameLocation") == true -> Fa.movements.transferSame
     error.message?.contains("StockTakeEmpty") == true -> Fa.stocktake.nothingCounted

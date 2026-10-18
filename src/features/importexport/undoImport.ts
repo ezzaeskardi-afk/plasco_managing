@@ -26,6 +26,9 @@ function rowLabel(row: ImportUndoBlockedRow): string {
       ? fa.importexport.undoRowHeld.replace('{name}', name).replace('{qty}', formatQty(row.qty))
       : fa.importexport.undoRowHeldMovement.replace('{name}', name);
   }
+  if (row.reason === 'code-taken') {
+    return fa.importexport.undoRowCodeTaken.replace('{name}', name);
+  }
   return fa.importexport.undoRowInUse.replace('{name}', name);
 }
 

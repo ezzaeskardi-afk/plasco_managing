@@ -37,7 +37,7 @@ export class ImportNothingToUndoError extends Error {
 }
 
 /** Why one journal row has to stay behind. */
-export type ImportUndoBlockReason = 'stock-used' | 'holds-stock' | 'in-use';
+export type ImportUndoBlockReason = 'stock-used' | 'holds-stock' | 'in-use' | 'code-taken';
 
 /** One row of the import that cannot be reverted right now. */
 export interface ImportUndoBlockedRow {
@@ -299,9 +299,27 @@ async function planImportUndo(entries: readonly ImportEntry[], target: PlascoDb)
     plan.productDeletes.push({ entryId: entry.id, productId: entry.productId });
   }
 
-  // Field restores are independent of stock, so they always revert.
+  // Field restores are independent of stock, so they always revert — unless the
+  // product's old code was taken over by another product since the import, in
+  // which case the restore would abort the whole undo on the unique `&code`
+  // index; that row stays behind and says why.
   for (const entry of entries) {
     if (entry.kind !== 'product-updated') continue;
+    const oldCode = entry.before.code;
+    if (oldCode !== undefined) {
+      const holder = await target.products.where('code').equals(oldCode).first();
+      if (holder && holder.id !== entry.productId) {
+        plan.blocked.push({
+          entryId: entry.id,
+          kind: 'product-updated',
+          targetId: entry.productId,
+          name: products.get(entry.productId)?.name,
+          reason: 'code-taken',
+          qty: 0,
+        });
+        continue;
+      }
+    }
     plan.restores.push({ entryId: entry.id, productId: entry.productId, before: entry.before });
   }
 

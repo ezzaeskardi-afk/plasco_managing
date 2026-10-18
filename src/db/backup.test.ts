@@ -5,7 +5,7 @@ import { createBackup, readBackup, restoreBackup, BackupInvalidError } from './b
 import { PlascoDb } from './dexie';
 import { applyMovement } from './movements';
 import { rebuildStockLevels } from './rebuild';
-import { createProduct, listProducts, updateProduct } from './repos';
+import { createProduct, listProducts, setSettings, updateProduct } from './repos';
 
 let db: PlascoDb;
 let dbIndex = 0;
@@ -124,6 +124,55 @@ describe('backup and restore', () => {
       expect(result.renumbered).toBe(1);
       const codes = (await listProducts(db)).map((row) => row.code).sort();
       expect(new Set(codes).size).toBe(2);
+    } finally {
+      await other.delete();
+    }
+  });
+
+  it('skips taken codes when renumbering instead of colliding', async () => {
+    await seedCatalogue(db);
+    // A second local product, and a stale counter: a fresh renumber would
+    // generate P-00001/P-00002 and hit the unique index twice.
+    await createProduct({ name: 'سبد', buyPrice: 6_000, retailPrice: 9_500 }, db);
+    await setSettings({ nextProductNo: 1 }, db);
+
+    const other = new PlascoDb(`test-backup-other-${dbIndex}`);
+    await other.open();
+    try {
+      await createProduct({ name: 'سطل', buyPrice: 5_000, retailPrice: 9_000 }, other);
+      const moved = await createBackup(other);
+      const result = await restoreBackup(moved.blob, 'merge', db);
+      expect(result.renumbered).toBe(1);
+      expect(await db.products.count()).toBe(3);
+      const codes = (await listProducts(db)).map((row) => row.code).sort();
+      expect(new Set(codes).size).toBe(3);
+      expect(codes).toContain('P-00003');
+    } finally {
+      await other.delete();
+    }
+  });
+
+  it('merge keeps the shelf label from the file on a bin-less level', async () => {
+    const product = await seedCatalogue(db);
+    await db.stockLevels.update([product.id, 'loc-shop'], { bin: 'قفسه ۳' });
+    const { blob } = await createBackup(db);
+
+    const other = new PlascoDb(`test-backup-other-${dbIndex}`);
+    await other.open();
+    try {
+      const row = await db.products.get(product.id);
+      if (!row) throw new Error('expected the seeded product');
+      await other.products.put({ ...row });
+      await applyMovement(
+        { productId: product.id, locationId: 'loc-shop', type: 'receive', qty: 7 },
+        other,
+      );
+
+      await restoreBackup(blob, 'merge', other);
+      const level = await other.stockLevels.get([product.id, 'loc-shop']);
+      // The ledger wins for the count (20 − 5 + 7); the file's label travels.
+      expect(level?.qty).toBe(22);
+      expect(level?.bin).toBe('قفسه ۳');
     } finally {
       await other.delete();
     }

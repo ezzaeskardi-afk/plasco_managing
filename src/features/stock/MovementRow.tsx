@@ -4,7 +4,8 @@ import type { Movement } from '@/db/types';
 import { formatJalali, formatQty, formatTime } from '@/domain/format';
 import { fa } from '@/i18n/fa';
 import { toastError, toastSuccess } from '@/lib/toast';
-import { AlreadyUndoneError, undoMovement } from '@/db/movements';
+import { suggestImportUndoRemainder } from '@/features/importexport/undoImport';
+import { AlreadyUndoneError, InsufficientStockError, undoMovement } from '@/db/movements';
 import { MOVEMENT_LABELS, movementTone } from './labels';
 
 export function MovementRow({
@@ -52,10 +53,22 @@ export function MovementRow({
               await undoMovement(movement.id);
               toastSuccess(fa.stock.undone);
               onUndone?.();
+              // Undoing a receive puts pieces back: a half-reverted import may
+              // now be able to finish, and the offer is cheap when it cannot.
+              void suggestImportUndoRemainder();
             } catch (error) {
-              toastError(
-                error instanceof AlreadyUndoneError ? fa.stock.undoFailed : fa.errors.title,
-              );
+              if (error instanceof InsufficientStockError) {
+                // The undo would push this shelf below zero because the pieces
+                // were sold since: name the reason instead of a generic error.
+                toastError(
+                  fa.stock.insufficient,
+                  fa.stock.insufficientHint.replace('{available}', formatQty(error.available)),
+                );
+              } else {
+                toastError(
+                  error instanceof AlreadyUndoneError ? fa.stock.undoFailed : fa.errors.title,
+                );
+              }
             } finally {
               setBusy(false);
             }

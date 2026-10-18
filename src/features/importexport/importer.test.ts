@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PlascoDb } from '@/db/dexie';
-import { createProduct, listLocations } from '@/db/repos';
+import { createProduct, listLocations, softDeleteProduct } from '@/db/repos';
 import { undoImportBatch } from '@/db/imports';
 import {
   buildContext,
@@ -72,6 +72,21 @@ describe('prepareRows', () => {
     );
     expect(prepared[0]?.productId).toBe(product.id);
     expect(prepared[0]?.action).toBe('update');
+  });
+
+  it('matches a UPC-A file barcode against its stored EAN-13 form', async () => {
+    const product = await createProduct(
+      { name: 'ظرف غذا', buyPrice: 15_000, retailPrice: 22_000, packSize: 12, barcodes: ['0600123456789'] },
+      db,
+    );
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [{ نام: 'ظرف غذا', بارکد: '600123456789', خرده: '۲۵۰۰۰' }],
+      { name: 'نام', barcode: 'بارکد', retail: 'خرده' },
+      context,
+    );
+    expect(prepared[0]?.action).toBe('update');
+    expect(prepared[0]?.productId).toBe(product.id);
   });
 
   it('flags rows without a name and duplicate rows', async () => {
@@ -178,6 +193,75 @@ describe('commitRows', () => {
     const result = await commitRows(prepared, {}, db);
     expect(result.created).toBe(0);
     expect(await db.products.count()).toBe(0);
+  });
+
+  it('fails only the row whose code is taken, not the whole chunk', async () => {
+    // A soft-deleted product keeps its code reserved, so the file row looks new
+    // and the repos throw mid-chunk; that must fail this row alone.
+    const taken = await seedProduct();
+    await softDeleteProduct(taken.id, db);
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [{ نام: 'کالای تازه' }, { نام: 'دوم', کد: taken.code }],
+      { name: 'نام', code: 'کد' },
+      context,
+    );
+    expect(prepared.map((row) => row.action)).toEqual(['new', 'new']);
+
+    const result = await commitRows(prepared, {}, db);
+    expect(result.created).toBe(1);
+    expect(result.failed).toBe(1);
+    // A code clash must not roll back the good row of the same chunk.
+    const names = (await db.products.toArray()).map((product) => product.name);
+    expect(names).toContain('کالای تازه');
+  });
+
+  it('creates the file brand when an update row names a new one', async () => {
+    const product = await seedProduct();
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [{ نام: 'ظرف غذا', برند: 'شرکت الف', خرده: '۲۵۰۰۰' }],
+      { name: 'نام', brand: 'برند', retail: 'خرده' },
+      context,
+    );
+    expect(prepared[0]?.action).toBe('update');
+
+    const result = await commitRows(prepared, {}, db);
+    expect(result.updated).toBe(1);
+    const brands = await db.brands.toArray();
+    expect(brands.map((brand) => brand.name)).toEqual(['شرکت الف']);
+    expect((await db.products.get(product.id))?.brandId).toBe(brands[0]?.id);
+  });
+});
+
+describe('import journal', () => {
+  it('restores a product once when two rows of the file touch it', async () => {
+    const product = await seedProduct();
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [
+        { نام: 'ظرف غذا', بارکد: '6260001', خرید: '۲۱۰۰۰' },
+        { نام: 'ظرف غذا', خرید: '۱۱۰۰۰' },
+      ],
+      { name: 'نام', barcode: 'بارکد', buy: 'خرید' },
+      context,
+    );
+    // Both rows match the same product through different keys.
+    expect(prepared.map((row) => row.action)).toEqual(['update', 'update']);
+
+    const commit = await commitRows(prepared, {}, db);
+    if (!commit.batchId) throw new Error('expected a batch');
+    expect((await db.products.get(product.id))?.buyPrice).toBe(11_000);
+
+    // One restore point only: the second row must not record the first row's
+    // already-imported value as its «before» (that replay would stick forever).
+    const updates = (await db.importEntries.where('batchId').equals(commit.batchId).toArray()).filter(
+      (entry) => entry.kind === 'product-updated',
+    );
+    expect(updates).toHaveLength(1);
+
+    await undoImportBatch(commit.batchId, db);
+    expect((await db.products.get(product.id))?.buyPrice).toBe(15_000);
   });
 });
 

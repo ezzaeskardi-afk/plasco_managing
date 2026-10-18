@@ -10,12 +10,13 @@ import { Input, Label } from '@/components/ui/input';
 import { EmptyState, Select, Switch } from '@/components/ui/misc';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { applyStockTake, revertStockTake } from '@/db/stocktake';
+import { suggestImportUndoRemainder } from '@/features/importexport/undoImport';
 import { listLocations, listProducts, listStockLevels } from '@/db/repos';
 import { db } from '@/db/dexie';
 import type { ID, Product, StockTake, StockTakeItem } from '@/db/types';
 import { matchProductByBarcode } from '@/domain/barcode';
 import { displayProductName, formatJalali, formatQty } from '@/domain/format';
-import { parseIntegerInput } from '@/domain/numbers';
+import { clampInt, parseIntegerInput } from '@/domain/numbers';
 import { buildSearchIndex, searchIndex } from '@/domain/search';
 import { fa } from '@/i18n/fa';
 import { MoneyText } from '@/components/common/Kpi';
@@ -155,6 +156,7 @@ export function StockTakeCountPage() {
   const [scanOpen, setScanOpen] = useState(false);
   const [scanTarget, setScanTarget] = useState<Product | null>(null);
   const [scanDraft, setScanDraft] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const countedMap = useMemo(
     () => new Map((items ?? []).map((item) => [item.productId, item])),
@@ -228,24 +230,39 @@ export function StockTakeCountPage() {
   }
 
   const saveCount = async (productId: ID, counted: number) => {
-    const existing = countedMap.get(productId);
-    const at = Date.now();
+    if (saving) return;
+    setSaving(true);
+    try {
+      await upsertCount(productId, clampInt(counted, 0, 9_999_999));
+      setOpenId(null);
+      setDraft('');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Reads the live row instead of the possibly-stale live-query map so a double
+  // tap (or a fast scan loop) can never insert two items for one product.
+  const upsertCount = async (productId: ID, counted: number) => {
+    const existing = await db.stockTakeItems
+      .where('[stockTakeId+productId]')
+      .equals([session.id, productId])
+      .first();
     const item: StockTakeItem = {
       id: existing?.id ?? newId(),
       stockTakeId: session.id,
       productId,
       counted,
       systemQtyAtCount: systemQty.get(productId) ?? 0,
-      at,
+      at: Date.now(),
     };
     await db.stockTakeItems.put(item);
-    setOpenId(null);
-    setDraft('');
   };
 
   const handleScan = (code: string) => {
     setScanOpen(false);
-    const found = matchProductByBarcode(products ?? [], code);
+    if (!products) return;
+    const found = matchProductByBarcode(products, code);
     if (!found) {
       toastError(`${fa.scan.notFound} ${code}`);
       return;
@@ -264,23 +281,32 @@ export function StockTakeCountPage() {
   // keeps the dialog open, and «ثبت و بارکد بعدی» hands the camera back.
   const saveScan = async (next: boolean) => {
     const target = scanTarget;
-    if (!target) return;
-    if (!scanDraft.trim()) {
-      const existing = countedMap.get(target.id);
-      if (existing) await db.stockTakeItems.delete(existing.id);
+    if (!target || saving) return;
+    setSaving(true);
+    try {
+      if (!scanDraft.trim()) {
+        const existing = await db.stockTakeItems
+          .where('[stockTakeId+productId]')
+          .equals([session.id, target.id])
+          .first();
+        if (existing) await db.stockTakeItems.delete(existing.id);
+        closeScanTarget();
+        if (next) setScanOpen(true);
+        return;
+      }
+      const parsed = parseIntegerInput(scanDraft);
+      if (parsed == null || parsed < 0) {
+        toastError(fa.stock.enterQty);
+        return;
+      }
+      // Same sane ceiling the phone's Int input implicitly has.
+      await upsertCount(target.id, clampInt(parsed, 0, 9_999_999));
+      toastSuccess(fa.stocktake.scanned);
       closeScanTarget();
       if (next) setScanOpen(true);
-      return;
+    } finally {
+      setSaving(false);
     }
-    const value = parseIntegerInput(scanDraft);
-    if (value == null || value < 0) {
-      toastError(fa.stock.enterQty);
-      return;
-    }
-    await saveCount(target.id, value);
-    toastSuccess(fa.stocktake.scanned);
-    closeScanTarget();
-    if (next) setScanOpen(true);
   };
 
   const existingScanCount = scanTarget ? countedMap.get(scanTarget.id) : undefined;
@@ -316,7 +342,7 @@ export function StockTakeCountPage() {
             className="ps-10"
           />
         </div>
-        <Button variant="secondary" onClick={() => setScanOpen(true)}>
+        <Button variant="secondary" disabled={!products} onClick={() => setScanOpen(true)}>
           <ScanLine className="size-5" />
           {fa.scan.button}
         </Button>
@@ -381,6 +407,7 @@ export function StockTakeCountPage() {
                     />
                   </div>
                   <Button
+                    disabled={saving}
                     onClick={() => {
                       const value = parseIntegerInput(draft);
                       if (value == null || value < 0) {
@@ -454,21 +481,21 @@ export function StockTakeCountPage() {
                 placeholder="۰"
               />
               <div className="mt-2 flex items-center gap-2">
-                <StepButton label={fa.stocktake.counted} onClick={() => bumpScan(-1)}>
+                <StepButton label={fa.stocktake.oneLess} onClick={() => bumpScan(-1)}>
                   <Minus className="size-4" />
                   <span className="tnum">۱</span>
                 </StepButton>
-                <StepButton label={fa.stocktake.counted} onClick={() => bumpScan(1)}>
+                <StepButton label={fa.stocktake.oneMore} onClick={() => bumpScan(1)}>
                   <Plus className="size-4" />
                   <span className="tnum">۱</span>
                 </StepButton>
               </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button className="flex-1" onClick={() => void saveScan(false)}>
+              <Button className="flex-1" disabled={saving} onClick={() => void saveScan(false)}>
                 {fa.actions.save}
               </Button>
-              <Button variant="secondary" onClick={() => void saveScan(true)}>
+              <Button variant="secondary" disabled={saving} onClick={() => void saveScan(true)}>
                 {fa.stocktake.scanNext}
               </Button>
             </div>
@@ -534,6 +561,8 @@ export function StockTakeReviewPage() {
       try {
         await revertStockTake(session.id);
         toastSuccess(fa.stocktake.revertedToast);
+        // Reverting puts pieces back: a half-reverted import may now finish.
+        void suggestImportUndoRemainder();
         navigate('/stocktake');
       } catch (error) {
         toastError(fa.errors.title, error instanceof Error ? error.message : undefined);
@@ -580,10 +609,15 @@ export function StockTakeReviewPage() {
     try {
       const result = await applyStockTake(session.id, { treatUncountedAsZero });
       if (result.movements.length > 0) {
-        toastUndo(fa.stocktake.appliedToast, () => revertStockTake(session.id));
+        toastUndo(fa.stocktake.appliedToast, async () => {
+          await revertStockTake(session.id);
+          void suggestImportUndoRemainder();
+        });
       } else {
         toastSuccess(fa.stocktake.appliedToast);
       }
+      // Surplus counts add pieces: the same offer any stock-in makes.
+      void suggestImportUndoRemainder();
       navigate('/stocktake');
     } catch (error) {
       toastError(fa.errors.title, error instanceof Error ? error.message : undefined);

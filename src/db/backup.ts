@@ -325,6 +325,9 @@ async function mergeProductsRenumbering(
     const clash = byCode.get(row.code);
     let code = row.code;
     if (clash && clash !== row.id) {
+      // The generated code can itself be taken (two devices reach the same
+      // range), so keep advancing until a free one is found.
+      while (byCode.has(formatProductCode(nextNo))) nextNo += 1;
       code = formatProductCode(nextNo);
       nextNo += 1;
       renumbered += 1;
@@ -368,6 +371,8 @@ export async function restoreBackup(
         target.stockTakes,
         target.stockTakeItems,
         target.photos,
+        // Settings are merged inside the same transaction (device identity kept).
+        target.settings,
         // The undo journal belongs to the outgoing dataset: its rows point at
         // products and movements replace is about to delete, so it goes too
         // (a stale `product-updated` row could otherwise rewrite prices later).
@@ -398,15 +403,29 @@ export async function restoreBackup(
         await target.priceChanges.bulkPut(t.priceChanges);
         await target.stockTakes.bulkPut(t.stockTakes);
         await target.stockTakeItems.bulkPut(t.stockTakeItems);
+        // Settings keep the current device identity; everything else comes from
+        // the file. Written in the same transaction as the data they describe.
+        const current = await getSettings(target);
+        const merged = new Map(t.settings.map((row) => [row.key, row.value]));
+        merged.set('deviceName', current.deviceName);
+        merged.set('devicePrefix', current.devicePrefix);
+        await target.settings.bulkPut(
+          Array.from(merged.entries()).map(([key, value]) => ({ key, value })),
+        );
+        // Photos ride in the same transaction too: a crash never leaves data
+        // from the new file with photos from the old one.
+        for (const [productId, kinds] of photos) {
+          const thumb = kinds.thumb;
+          const full = kinds.full;
+          if (!thumb || !full) continue;
+          await target.photos.put({
+            productId,
+            thumb: new Blob([thumb as unknown as BlobPart]),
+            full: new Blob([full as unknown as BlobPart]),
+            updatedAt: data.exportedAt,
+          });
+        }
       },
-    );
-    // Settings keep the current device identity; everything else comes from the file.
-    const current = await getSettings(target);
-    const merged = new Map(t.settings.map((row) => [row.key, row.value]));
-    merged.set('deviceName', current.deviceName);
-    merged.set('devicePrefix', current.devicePrefix);
-    await target.settings.bulkPut(
-      Array.from(merged.entries()).map(([key, value]) => ({ key, value })),
     );
   } else {
     await target.transaction(
@@ -433,23 +452,40 @@ export async function restoreBackup(
         await mergeTable(target.priceChanges, t.priceChanges);
         await mergeTable(target.stockTakes, t.stockTakes);
         await mergeTable(target.stockTakeItems, t.stockTakeItems);
-        // Levels are a cache: they are recomputed from movements below.
+        // Quantities are a cache recomputed from movements below, but a shelf
+        // position is not derivable: the file's bin fills a level that has none,
+        // and when both sides have one the newer row wins.
+        for (const level of t.stockLevels) {
+          if (!level.bin) continue;
+          const existing = await target.stockLevels.get([level.productId, level.locationId]);
+          if (existing?.bin && existing.updatedAt >= level.updatedAt) continue;
+          await target.stockLevels.put({
+            productId: level.productId,
+            locationId: level.locationId,
+            qty: existing?.qty ?? 0,
+            bin: level.bin,
+            updatedAt: Math.max(existing?.updatedAt ?? 0, level.updatedAt),
+          });
+        }
       },
     );
   }
 
-  for (const [productId, kinds] of photos) {
-    const thumb = kinds.thumb;
-    const full = kinds.full;
-    if (!thumb || !full) continue;
-    const existing = await target.photos.get(productId);
-    if (mode === 'merge' && existing && existing.updatedAt > data.exportedAt) continue;
-    await target.photos.put({
-      productId,
-      thumb: new Blob([thumb as unknown as BlobPart]),
-      full: new Blob([full as unknown as BlobPart]),
-      updatedAt: data.exportedAt,
-    });
+  // Replace already wrote its photos inside the transaction above.
+  if (mode === 'merge') {
+    for (const [productId, kinds] of photos) {
+      const thumb = kinds.thumb;
+      const full = kinds.full;
+      if (!thumb || !full) continue;
+      const existing = await target.photos.get(productId);
+      if (existing && existing.updatedAt > data.exportedAt) continue;
+      await target.photos.put({
+        productId,
+        thumb: new Blob([thumb as unknown as BlobPart]),
+        full: new Blob([full as unknown as BlobPart]),
+        updatedAt: data.exportedAt,
+      });
+    }
   }
 
   await rebuildStockLevels(target);

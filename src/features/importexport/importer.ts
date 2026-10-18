@@ -14,6 +14,7 @@ import {
   type ProductDraft,
 } from '@/db/repos';
 import type { Brand, ID, ImportEntry, ImportedProductFields, Location, Product } from '@/db/types';
+import { barcodeKeys } from '@/domain/barcode';
 import { normalizeFa } from '@/domain/normalizeFa';
 import { parseIntegerInput } from '@/domain/numbers';
 import { newId } from '@/lib/id';
@@ -165,11 +166,14 @@ export function matchProduct(
   input: { barcode?: string; code?: string; nameN?: string; brandId?: ID },
 ): Product | undefined {
   if (input.barcode) {
-    const barcode = normalizeFa(input.barcode);
-    const hit = context.products.find((product) =>
-      product.barcodes.some((value) => normalizeFa(value) === barcode),
-    );
-    if (hit) return hit;
+    // The shop rule everywhere else: a UPC-A and its EAN-13 form are one barcode.
+    const keys = barcodeKeys(input.barcode);
+    if (keys.length > 0) {
+      const hit = context.products.find((product) =>
+        product.barcodes.some((value) => barcodeKeys(value).some((key) => keys.includes(key))),
+      );
+      if (hit) return hit;
+    }
   }
   if (input.code) {
     const code = input.code.trim();
@@ -347,100 +351,120 @@ export async function commitRows(
   const usable = rows.filter((row) => row.action === 'new' || row.action === 'update');
   const batchId = newId();
   let movementsWritten = 0;
+  // One restore point per product: without this, a file with two rows touching
+  // the same product records the already-imported values as its «before».
+  const journaledUpdates = new Set<ID>();
 
-  for (let offset = 0; offset < usable.length; offset += chunkSize) {
-    const chunk = usable.slice(offset, offset + chunkSize);
-    // Every table a nested repo call may touch must be listed here, otherwise
-    // Dexie raises SubTransactionError (priceChanges was the missing one).
-    await target.transaction(
-      'rw',
-      [
-        target.products,
-        target.brands,
-        target.settings,
-        target.movements,
-        target.stockLevels,
-        target.priceChanges,
-        target.importEntries,
-      ],
-      async () => {
-        // The journal is written with the data, so a rolled-back chunk leaves no trace.
-        const journal: ImportEntry[] = [];
-        for (const row of chunk) {
-          if (!row.draft) {
-            result.skipped += 1;
-            continue;
-          }
-          try {
-            const partial = { ...row.draft };
-            if (row.action === 'new' && !partial.brandId && row.newBrandName) {
-              const brand = await createBrand({ name: row.newBrandName }, target);
-              partial.brandId = brand.id;
-              journal.push({ id: newId(), batchId, kind: 'brand-created', brandId: brand.id });
-            }
-
-            let productId: ID;
-            const isNew = row.action === 'new';
-            if (isNew) {
-              productId = (await createProduct(withDefaults(partial), target)).id;
-              result.created += 1;
-              journal.push({ id: newId(), batchId, kind: 'product-created', productId });
-            } else if (row.productId) {
-              const existing = await target.products.get(row.productId);
-              await updateProduct(row.productId, partial, { reason: 'import' }, target);
-              productId = row.productId;
-              result.updated += 1;
-              if (existing) {
-                journal.push({
-                  id: newId(),
-                  batchId,
-                  kind: 'product-updated',
-                  productId,
-                  before: beforeValues(existing, partial),
-                });
-              }
-            } else {
+  try {
+    for (let offset = 0; offset < usable.length; offset += chunkSize) {
+      const chunk = usable.slice(offset, offset + chunkSize);
+      // Every table a nested repo call may touch must be listed here, otherwise
+      // Dexie raises SubTransactionError (priceChanges was the missing one).
+      await target.transaction(
+        'rw',
+        [
+          target.products,
+          target.brands,
+          target.settings,
+          target.movements,
+          target.stockLevels,
+          target.priceChanges,
+          target.importEntries,
+        ],
+        async () => {
+          // The journal is written with the data, so a rolled-back chunk leaves no trace.
+          const journal: ImportEntry[] = [];
+          for (const row of chunk) {
+            if (!row.draft) {
               result.skipped += 1;
               continue;
             }
-
-            if (row.quantity != null && row.locationId && (isNew || updateExistingStock)) {
-              const level = await target.stockLevels.get([productId, row.locationId]);
-              const delta = row.quantity - (level?.qty ?? 0);
-              if (delta !== 0) {
-                const movement = await applyMovement(
-                  {
-                    productId,
-                    locationId: row.locationId,
-                    type: isNew ? 'initial' : 'adjust',
-                    qty: delta,
-                    unitCost: partial.buyPrice,
-                    note: 'import',
-                  },
-                  target,
-                );
-                movementsWritten += 1;
-                journal.push({
-                  id: newId(),
-                  batchId,
-                  kind: 'movement',
-                  movementId: movement.id,
-                  productId,
-                });
+            try {
+              const partial = { ...row.draft };
+              // A taken code must fail this row, not abort the whole chunk (Dexie
+              // rolls back on any throw), so the clash is checked before writing.
+              if (partial.code) {
+                const clash = await target.products.where('code').equals(partial.code).first();
+                if (clash && clash.id !== row.productId) {
+                  result.failed += 1;
+                  continue;
+                }
               }
+              if (!partial.brandId && row.newBrandName) {
+                const brand = await createBrand({ name: row.newBrandName }, target);
+                partial.brandId = brand.id;
+                journal.push({ id: newId(), batchId, kind: 'brand-created', brandId: brand.id });
+              }
+
+              let productId: ID;
+              const isNew = row.action === 'new';
+              if (isNew) {
+                productId = (await createProduct(withDefaults(partial), target)).id;
+                result.created += 1;
+                journal.push({ id: newId(), batchId, kind: 'product-created', productId });
+              } else if (row.productId) {
+                const existing = await target.products.get(row.productId);
+                await updateProduct(row.productId, partial, { reason: 'import' }, target);
+                productId = row.productId;
+                result.updated += 1;
+                if (existing && !journaledUpdates.has(productId)) {
+                  journaledUpdates.add(productId);
+                  journal.push({
+                    id: newId(),
+                    batchId,
+                    kind: 'product-updated',
+                    productId,
+                    before: beforeValues(existing, partial),
+                  });
+                }
+              } else {
+                result.skipped += 1;
+                continue;
+              }
+
+              if (row.quantity != null && row.locationId && (isNew || updateExistingStock)) {
+                const level = await target.stockLevels.get([productId, row.locationId]);
+                const delta = row.quantity - (level?.qty ?? 0);
+                if (delta !== 0) {
+                  const movement = await applyMovement(
+                    {
+                      productId,
+                      locationId: row.locationId,
+                      type: isNew ? 'initial' : 'adjust',
+                      qty: delta,
+                      unitCost: partial.buyPrice,
+                      note: 'import',
+                    },
+                    target,
+                  );
+                  movementsWritten += 1;
+                  journal.push({
+                    id: newId(),
+                    batchId,
+                    kind: 'movement',
+                    movementId: movement.id,
+                    productId,
+                  });
+                }
+              }
+            } catch (error) {
+              if (error instanceof DuplicateCodeError || error instanceof ProductCodeExhaustedError) {
+                result.failed += 1;
+                continue;
+              }
+              throw error;
             }
-          } catch (error) {
-            if (error instanceof DuplicateCodeError || error instanceof ProductCodeExhaustedError) {
-              result.failed += 1;
-              continue;
-            }
-            throw error;
           }
-        }
-        if (journal.length > 0) await target.importEntries.bulkAdd(journal);
-      },
-    );
-    onProgress?.(Math.min(offset + chunkSize, usable.length), usable.length);
+          if (journal.length > 0) await target.importEntries.bulkAdd(journal);
+        },
+      );
+      onProgress?.(Math.min(offset + chunkSize, usable.length), usable.length);
+    }
+  } catch (error) {
+    // A chunk that failed mid-way leaves the journal rows of earlier chunks with
+    // no batch row to reach them; drop them or they linger forever.
+    await target.importEntries.where('batchId').equals(batchId).delete();
+    throw error;
   }
 
   // The batch row is written last: a commit that failed midway leaves no batch to undo.

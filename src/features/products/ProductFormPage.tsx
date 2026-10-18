@@ -136,6 +136,7 @@ export function ProductFormPage() {
   const [photoCleared, setPhotoCleared] = useState(false);
   const [saving, setSaving] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [scanChecking, setScanChecking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -165,16 +166,25 @@ export function ProductFormPage() {
       toastError(fa.scan.notFound);
       return;
     }
-    // The same barcode on another row is a shop mistake worth stopping here.
-    const others = (await listProducts()).filter((product) => product.id !== id);
-    const owner = matchProductByBarcode(others, code);
-    if (owner) {
-      toastError(fa.scan.otherProduct.replace('{name}', displayProductName(owner.name)));
-      return;
+    // Already on this product: nothing to add, and no misleading «added» toast.
+    if (parseBarcodeList(watch('barcodes')).includes(code)) return;
+    setScanChecking(true);
+    try {
+      // The same barcode on another row is a shop mistake worth stopping here.
+      const others = (await listProducts()).filter((product) => product.id !== id);
+      const owner = matchProductByBarcode(others, code);
+      if (owner) {
+        toastError(fa.scan.otherProduct.replace('{name}', displayProductName(owner.name)));
+        return;
+      }
+      // Append to the text as typed; never rewrite what the user wrote.
+      const latest = watch('barcodes');
+      const next = latest.trim() ? `${latest.replace(/\s+$/, '')}\n${code}` : code;
+      setValue('barcodes', next);
+      toastSuccess(fa.scan.added);
+    } finally {
+      setScanChecking(false);
     }
-    const merged = [...new Set([...parseBarcodeList(watch('barcodes')), code])];
-    setValue('barcodes', merged.join('\n'));
-    toastSuccess(fa.scan.added);
   };
 
   useEffect(() => {
@@ -484,14 +494,14 @@ export function ProductFormPage() {
       </Section>
 
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || scanChecking}>
           {fa.actions.save}
         </Button>
         {!isEdit ? (
           <Button
             type="button"
             variant="secondary"
-            disabled={saving}
+            disabled={saving || scanChecking}
             onClick={handleSubmit((values) => void submit(values, true))}
           >
             {fa.actions.saveAndNext}

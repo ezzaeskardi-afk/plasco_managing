@@ -105,6 +105,36 @@ describe('undoImportBatch', () => {
     expect(reverted?.newValue).toBe(22_000);
   });
 
+  it('blocks a field restore whose old code was taken over by another product', async () => {
+    const product = await createProduct(
+      { name: 'ظرف غذا', buyPrice: 15_000, retailPrice: 22_000, packSize: 12 },
+      db,
+    );
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [{ نام: 'ظرف غذا', کد: 'NEW-1', خرده: '۲۵۰۰۰' }],
+      { name: 'نام', code: 'کد', retail: 'خرده' },
+      context,
+    );
+    const commit = await commitRows(prepared, {}, db);
+    const batchId = requireBatchId(commit);
+    const oldCode = product.code;
+    expect((await db.products.get(product.id))?.code).toBe('NEW-1');
+
+    // Another product takes the freed code before the undo runs: replaying the
+    // old value would abort the whole undo on the unique index.
+    await createProduct({ name: 'کالای دوم', buyPrice: 1_000, retailPrice: 2_000, code: oldCode }, db);
+
+    const preview = await previewImportUndo(batchId, db);
+    expect(preview.undoableRows).toBe(0);
+    expect(preview.blockedRows.map((row) => [row.name, row.reason])).toEqual([
+      ['ظرف غذا', 'code-taken'],
+    ]);
+
+    await expect(undoImportBatch(batchId, db)).rejects.toBeInstanceOf(ImportUndoBlockedError);
+    expect((await db.products.get(product.id))?.retailPrice).toBe(25_000);
+  });
+
   it('refuses to undo once the imported stock has been used', async () => {
     const locationId = await firstLocationId();
     const context = await buildContext(db);

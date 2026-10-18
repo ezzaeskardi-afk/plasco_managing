@@ -115,14 +115,23 @@ export function StockOpPage() {
       setCurrentQty(null);
       return;
     }
+    // Two quick product switches must not let the first read land on the second card.
+    let ignore = false;
     void productLevels(productId).then((levels) => {
+      if (ignore) return;
       setCurrentQty(levels.find((l) => l.locationId === locationId)?.qty ?? 0);
     });
+    return () => {
+      ignore = true;
+    };
   }, [productId, locationId, products]);
 
-  // A «تعداد در کارتن» typed for one product must not survive to the next one.
+  // A «تعداد در کارتن» or quantity typed for one product must not survive to the
+  // next one — the scan button makes switching products a one-tap action.
   useEffect(() => {
     setEntryPackSize(null);
+    setQty(0);
+    setTargetQty('');
   }, [product?.id]);
 
   if (!products || !locations) return <p className="text-crate">{fa.common.loading}</p>;

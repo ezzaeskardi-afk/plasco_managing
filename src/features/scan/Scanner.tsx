@@ -32,7 +32,25 @@ function loadDetector(): Promise<Detector> {
   return detectorPromise;
 }
 
+/**
+ * The vendor caches a rejected WASM module promise for the whole page session
+ * and its constructor reports success anyway, so a broken first load would
+ * otherwise leave every later scan dead but silent. Drop both caches so the
+ * retry button can genuinely start over.
+ */
+async function discardDetector(): Promise<void> {
+  detectorPromise = null;
+  try {
+    const { purgeZXingModule } = await import('barcode-detector/ponyfill');
+    await purgeZXingModule();
+  } catch {
+    // Nothing cached to purge, or the module never loaded; either way retrying is safe.
+  }
+}
+
 const RETRY_MS = 250;
+/** Consecutive detect rejections before the scanner declares the reader broken. */
+const MAX_TICK_FAILURES = 12;
 
 type Phase = 'starting' | 'scanning' | 'denied' | 'failed';
 
@@ -114,7 +132,12 @@ function CameraStage({
           video: { facingMode: { ideal: 'environment' } },
           audio: false,
         });
-        if (cancelled) return;
+        if (cancelled) {
+          // The cleanup ran while getUserMedia was still resolving; nobody else
+          // can reach this stream, so stop it here or the camera stays on.
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         video.srcObject = stream;
         await video.play();
         if (cancelled) return;
@@ -128,6 +151,7 @@ function CameraStage({
         if (cancelled) return;
         setPhase('scanning');
 
+        let failures = 0;
         const tick = async () => {
           if (cancelled || delivered) return;
           if (video.readyState < 2) {
@@ -136,6 +160,7 @@ function CameraStage({
           }
           try {
             const found = await detector.detect(video);
+            failures = 0;
             const value = found.map((barcode) => barcode.rawValue.trim()).find(Boolean);
             if (value && !cancelled && !delivered) {
               delivered = true;
@@ -143,13 +168,24 @@ function CameraStage({
               return;
             }
           } catch {
-            // A single unreadable frame is not a failure; the loop moves on.
+            // One unreadable frame is not a failure; a permanently rejecting
+            // reader (broken WASM cache) is — give it ~3 s, then say so.
+            failures += 1;
+            if (failures >= MAX_TICK_FAILURES && !cancelled && !delivered) {
+              await discardDetector();
+              if (!cancelled) setPhase('failed');
+              return;
+            }
           }
           schedule(() => void tick());
         };
         schedule(() => void tick());
       } catch (error) {
         if (cancelled) return;
+        // A refused play() leaves the camera running behind the panel; stop it.
+        stream?.getTracks().forEach((track) => track.stop());
+        video.srcObject = null;
+        trackRef.current = null;
         setPhase(
           error instanceof DOMException && error.name === 'NotAllowedError' ? 'denied' : 'failed',
         );
@@ -224,6 +260,7 @@ function CameraStage({
             <>
               <ScanLine className="size-10" />
               <p className="text-crate">{fa.scan.noCamera}</p>
+              <Button onClick={() => setAttempt((value) => value + 1)}>{fa.scan.retry}</Button>
             </>
           )}
           <Button variant="secondary" onClick={onClose}>

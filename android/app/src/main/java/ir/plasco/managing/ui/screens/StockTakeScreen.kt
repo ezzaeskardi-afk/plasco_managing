@@ -70,6 +70,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
     var scanCount by remember { mutableStateOf("") }
     var confirmApply by remember { mutableStateOf(false) }
     var revertId by remember { mutableStateOf<ID?>(null) }
+    var resumeId by remember { mutableStateOf<ID?>(null) }
 
     val active = remember(products) { products.filter { it.active } }
     val atLocation = remember(levels, locationId) {
@@ -88,10 +89,23 @@ fun StockTakeScreen(onBack: () -> Unit) {
     }
 
     // ثبت شمارش همان کالایی که همین حالا خوانده شد؛ «و بارکد بعدی» دوربین را بازمی‌گرداند.
+    // خالی = بی‌صدا پاک می‌شود، نامعتبر یا منفی = خطا و دیالوگ می‌ماند (مثل وب)،
+    // و پیام موفقیت فقط وقتی می‌آید که واقعاً عددی ذخیره شده باشد.
     fun saveScan(next: Boolean) {
         val target = scanTarget ?: return
         val text = scanCount.trim()
-        if (text.isEmpty()) counts.remove(target.id) else counts[target.id] = text
+        if (text.isEmpty()) {
+            counts.remove(target.id)
+            scanTarget = null
+            if (next) scanOpen = true
+            return
+        }
+        val parsed = parseIntegerInput(text)
+        if (parsed == null || parsed < 0) {
+            showMessage(Fa.stocktake.enterQty)
+            return
+        }
+        counts[target.id] = text
         scanTarget = null
         showMessage(Fa.stocktake.scanned)
         if (next) scanOpen = true
@@ -100,12 +114,18 @@ fun StockTakeScreen(onBack: () -> Unit) {
     // اعمال و بازگردانی مثل نسخهٔ وب اول پرسش «مطمئنی؟» دارند؛ اعمال تعداد کالاهای
     // متغیر را می‌گوید و بازگردانی هم توضیح می‌دهد که جلسه دوباره «باز» می‌شود.
     fun applyCounts() {
+        // شمارش منفی معنی ندارد؛ نسخهٔ وب هم همان‌جا ردش می‌کند.
+        if (counted.values.any { it < 0 }) {
+            showMessage(Fa.stocktake.enterQty)
+            return
+        }
         busy = true
         scope.launch {
             try {
-                container.stock.applyStockTake(locationId, counted)
+                container.stock.applyStockTake(locationId, counted, stockTakeId = resumeId)
                 showMessage(Fa.stocktake.applied)
                 counts.clear()
+                resumeId = null
             } catch (error: Throwable) {
                 showMessage(messageFor(error))
             } finally {
@@ -119,6 +139,10 @@ fun StockTakeScreen(onBack: () -> Unit) {
             try {
                 container.stock.revertStockTake(id)
                 showMessage(Fa.stocktake.reverted)
+                // شمارش‌های روی صفحه مالِ جلسهٔ برگردانده‌شده بود؛ پاک می‌شوند تا
+                // ثبت دوباره جلسهٔ تازه نسازد (ادامه از خود ردیف تاریخچه شروع می‌شود).
+                counts.clear()
+                resumeId = null
             } catch (error: Throwable) {
                 showMessage(messageFor(error))
             }
@@ -129,7 +153,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
         item {
             ScreenHeader(
                 title = Fa.stocktake.title,
-                subtitle = Fa.stocktake.applyHint,
+                subtitle = if (resumeId != null) Fa.stocktake.resume else Fa.stocktake.applyHint,
                 onBack = onBack,
                 action = { OutlinedButton(onClick = { scanOpen = true }) { Text(Fa.scan.button) } },
             )
@@ -143,6 +167,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
                 onSelect = {
                     locationId = it
                     counts.clear()
+                    resumeId = null
                 },
                 modifier = Modifier.padding(horizontal = 12.dp),
             )
@@ -208,18 +233,34 @@ fun StockTakeScreen(onBack: () -> Unit) {
                         )
                         Text(
                             formatJalali(take.appliedAt ?: take.updatedAt) + " · " + when (take.status) {
-                                StockTakeStatus.Applied -> "اعمال‌شده"
-                                StockTakeStatus.Open -> "باز"
-                                StockTakeStatus.Cancelled -> "لغو‌شده"
+                                StockTakeStatus.Applied -> Fa.stocktake.statusApplied
+                                StockTakeStatus.Open -> Fa.stocktake.statusOpen
+                                StockTakeStatus.Cancelled -> Fa.stocktake.statusCancelled
                             },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (take.status == StockTakeStatus.Applied) {
-                        OutlinedButton(
+                    when (take.status) {
+                        StockTakeStatus.Applied -> OutlinedButton(
                             onClick = { revertId = take.id },
                         ) { Text(Fa.stocktake.revert) }
+                        // جلسهٔ نیمه‌کاره (برگردانده‌شده) را همین‌جا می‌شود ادامه داد:
+                        // مکان و شمارش‌های قبلی‌اش برمی‌گردند و دوباره ثبت می‌شود.
+                        StockTakeStatus.Open -> OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    val saved = container.stock.itemsOf(take.id)
+                                    val activeIds = active.map { it.id }.toSet()
+                                    locationId = take.locationId
+                                    counts.clear()
+                                    saved.filter { it.productId in activeIds }
+                                        .forEach { counts[it.productId] = it.counted.toString() }
+                                    resumeId = take.id
+                                }
+                            },
+                        ) { Text(Fa.stocktake.resume) }
+                        StockTakeStatus.Cancelled -> Unit
                     }
                 }
             }

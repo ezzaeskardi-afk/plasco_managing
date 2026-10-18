@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.plasco.managing.domain.ProductSearchIndex
+import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.productTotals
 import ir.plasco.managing.model.ID
 import ir.plasco.managing.ui.Fa
@@ -80,7 +81,7 @@ fun ProductsScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         ScreenHeader(
             title = Fa.products.title,
-            subtitle = "${filtered.size} کالا",
+            subtitle = "${formatNumber(filtered.size)} ${Fa.products.countLabel}",
             action = { Button(onClick = onNewProduct) { Text(Fa.products.newProduct) } },
         )
         OutlinedTextField(
@@ -117,7 +118,7 @@ fun ProductsScreen(
             if (products.isEmpty()) {
                 item { EmptyState(Fa.products.empty, Fa.products.newProduct, onNewProduct) }
             } else if (filtered.isEmpty()) {
-                item { EmptyState(Fa.products.noResult) }
+                item { EmptyState(Fa.products.noResult, Fa.products.newProduct, onNewProduct) }
             } else {
                 items(filtered, key = { it.id }) { product ->
                     ProductRow(

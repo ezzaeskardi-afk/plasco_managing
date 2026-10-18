@@ -79,6 +79,16 @@ fun Product.toValues(): ContentValues = ContentValues().apply {
     put("deletedAt", deletedAt)
 }
 
+/**
+ * ویرایش ردیف موجود: `id`، `createdAt` و `deletedAt` نوشته نمی‌شوند تا UPDATE
+ * ناخواسته یک کالای حذف‌شده را احیا یا زمان ساختش را بازنویسی نکند (مثل وب).
+ */
+fun Product.toUpdateValues(): ContentValues = toValues().apply {
+    remove("id")
+    remove("createdAt")
+    remove("deletedAt")
+}
+
 fun Cursor.toStockLevel(): StockLevel = StockLevel(
     productId = text("productId"),
     locationId = text("locationId"),

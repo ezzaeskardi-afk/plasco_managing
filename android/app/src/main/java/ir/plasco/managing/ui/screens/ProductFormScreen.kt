@@ -36,6 +36,7 @@ import ir.plasco.managing.ui.Fa
 import ir.plasco.managing.ui.LocalAppContainer
 import ir.plasco.managing.ui.LocalShowMessage
 import ir.plasco.managing.ui.components.ChipRow
+import ir.plasco.managing.ui.components.EmptyState
 import ir.plasco.managing.ui.components.NumberField
 import ir.plasco.managing.ui.components.Panel
 import ir.plasco.managing.ui.components.PhotoSection
@@ -69,7 +70,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
     var wholesale by remember(key) {
         mutableStateOf(existing?.wholesalePrice?.let { formatNumber(it) }.orEmpty())
     }
-    var packLabel by remember(key) { mutableStateOf(existing?.packLabel ?: "عدد") }
+    var packLabel by remember(key) { mutableStateOf(existing?.packLabel ?: "کارتن") }
     var packSize by remember(key) { mutableStateOf(existing?.packSize?.toString() ?: "1") }
     var minStock by remember(key) { mutableStateOf(existing?.minStock?.toString().orEmpty()) }
     var note by remember(key) { mutableStateOf(existing?.note.orEmpty()) }
@@ -86,10 +87,33 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
 
     fun save() {
-        // هیچ فیلدی اجباری نیست (AGENTS.md بخش ۲۵): نام خالی هم ذخیره میشود و
-        // فهرستها «بدون نام» نشان میدهند؛ فقط عیب واقعی جلوی ذخیره را میگیرد.
-        val size = parseIntegerInput(packSize) ?: 1
+        // هیچ فیلدی اجباری نیست (AGENTS.md بخش ۲۵): نام خالی هم ذخیره می‌شود و
+        // فهرست‌ها «بدون نام» نشان می‌دهند؛ فقط عیب واقعی جلوی ذخیره را می‌گیرد.
+        // پول مثل وب اعتبارسنجی می‌شود: متن نامعتبر یا منفی با پیام خودش برمی‌گردد
+        // و بی‌صدا صفر نمی‌شود.
+        val parsedBuy = if (buyPrice.isBlank()) 0 else parseIntegerInput(buyPrice)
+        val parsedRetail = if (retailPrice.isBlank()) 0 else parseIntegerInput(retailPrice)
+        val parsedWholesale = if (wholesale.isBlank()) null else parseIntegerInput(wholesale)
+        val parsedMinStock = if (minStock.isBlank()) null else parseIntegerInput(minStock)
+        if (parsedBuy == null || parsedBuy < 0) {
+            showMessage(Fa.products.buyPriceInvalid)
+            return
+        }
+        if (parsedRetail == null || parsedRetail < 0) {
+            showMessage(Fa.products.retailPriceInvalid)
+            return
+        }
+        if (wholesale.isNotBlank() && (parsedWholesale == null || parsedWholesale < 0)) {
+            showMessage(Fa.products.wholesalePriceInvalid)
+            return
+        }
+        if (minStock.isNotBlank() && (parsedMinStock == null || parsedMinStock < 0)) {
+            showMessage(Fa.products.minStockInvalid)
+            return
+        }
+        val size = (parseIntegerInput(packSize) ?: 1).coerceAtLeast(1)
         val initial = piecesFrom(parseIntegerInput(packsIn) ?: 0, parseIntegerInput(piecesIn) ?: 0, size)
+            .coerceAtLeast(0)
         busy = true
         scope.launch {
             // عکس مثل بقیهٔ فیلدها با همین ذخیره می‌نشیند: انتخاب‌شده را می‌نویسد و
@@ -105,12 +129,12 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                             brandId = brandId.ifEmpty { null },
                             categoryId = categoryId.ifEmpty { null },
                             barcodes = parseBarcodeList(barcodes),
-                            packLabel = packLabel.ifBlank { "عدد" },
+                            packLabel = packLabel.ifBlank { "کارتن" },
                             packSize = size,
-                            buyPrice = parseIntegerInput(buyPrice) ?: 0,
-                            retailPrice = parseIntegerInput(retailPrice) ?: 0,
-                            wholesalePrice = parseIntegerInput(wholesale),
-                            minStock = parseIntegerInput(minStock),
+                            buyPrice = parsedBuy,
+                            retailPrice = parsedRetail,
+                            wholesalePrice = parsedWholesale,
+                            minStock = parsedMinStock,
                             note = note.ifBlank { null },
                             initialQty = initial,
                             locationId = locationId.ifEmpty { null },
@@ -125,12 +149,12 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                             brandId = brandId.ifEmpty { null },
                             categoryId = categoryId.ifEmpty { null },
                             barcodes = parseBarcodeList(barcodes),
-                            packLabel = packLabel.ifBlank { "عدد" },
+                            packLabel = packLabel.ifBlank { "کارتن" },
                             packSize = size,
-                            buyPrice = parseIntegerInput(buyPrice) ?: 0,
-                            retailPrice = parseIntegerInput(retailPrice) ?: 0,
-                            wholesalePrice = parseIntegerInput(wholesale),
-                            minStock = parseIntegerInput(minStock),
+                            buyPrice = parsedBuy,
+                            retailPrice = parsedRetail,
+                            wholesalePrice = parsedWholesale,
+                            minStock = parsedMinStock,
                             note = note.ifBlank { null },
                         ),
                     )
@@ -152,6 +176,17 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                 busy = false
             }
         }
+    }
+
+    // شناسهٔ ناموجود (کالای حذف‌شده یا مسیرِ کهنه) نباید فرمِ خالیِ «کالای تازه»
+    // نشان بدهد که با ذخیره، کالای تکراری بسازد. «کالاها که لود شدند» شرط است تا
+    // در شروع سرد یا بازیابی مسیر، فرم سالم فلش نزند.
+    if (productId != null && existing == null && products.isNotEmpty()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            ScreenHeader(title = Fa.products.editTitle, onBack = onDone)
+            EmptyState(Fa.errors.noProduct, Fa.common.back, onDone)
+        }
+        return
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -320,7 +355,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                             }
                         },
                     ) {
-                        Text(if (existing.active) "غیرفعال کن" else "فعال کن")
+                        Text(if (existing.active) Fa.products.deactivate else Fa.products.activate)
                     }
                 }
             }
@@ -378,6 +413,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
 /** خطاها را به جملهٔ فارسی تبدیل می‌کند. */
 internal fun messageFor(error: Throwable): String = when {
     error.message?.contains("DuplicateProductCode") == true -> Fa.errors.duplicateCode
+    error.message?.contains("ProductCodeExhausted") == true -> Fa.errors.codeExhausted
     error.message?.contains("InsufficientStock") == true -> Fa.errors.insufficient
     error.message?.contains("MovementQtyMustBeNonZero") == true -> Fa.movements.notEnough
     error.message?.contains("AlreadyUndone") == true -> Fa.errors.alreadyUndone

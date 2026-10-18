@@ -25,6 +25,17 @@ export class DuplicateCodeError extends Error {
   }
 }
 
+/** Raised when the auto-code sequence runs past `MAX_PRODUCT_NO`. */
+export class ProductCodeExhaustedError extends Error {
+  constructor() {
+    super('ProductCodeExhausted');
+    this.name = 'ProductCodeExhaustedError';
+  }
+}
+
+// The auto-code bound, mirrored by the Android app (P-9999999 is the last one).
+export const MAX_PRODUCT_NO = 9_999_999;
+
 function now(): number {
   return Date.now();
 }
@@ -238,9 +249,8 @@ export async function createProduct(
   return target.transaction('rw', target.products, target.settings, async () => {
     const settings = await getSettings(target);
     const custom = draft.code?.trim();
-    const code = custom && custom.length > 0 ? custom : formatProductCode(settings.nextProductNo);
     const at = now();
-    const product: Product = {
+    const build = (code: string): Product => ({
       id: newId(),
       code,
       name: draft.name.trim(),
@@ -260,16 +270,37 @@ export async function createProduct(
       active: draft.active ?? true,
       createdAt: at,
       updatedAt: at,
-    };
+    });
 
-    try {
-      await target.products.add(product);
-    } catch (error) {
-      if (isConstraintError(error)) throw new DuplicateCodeError(code);
-      throw error;
+    if (custom && custom.length > 0) {
+      const product = build(custom);
+      try {
+        await target.products.add(product);
+      } catch (error) {
+        if (isConstraintError(error)) throw new DuplicateCodeError(custom);
+        throw error;
+      }
+      return product;
     }
-    if (!custom) await setSettings({ nextProductNo: settings.nextProductNo + 1 }, target);
-    return product;
+
+    // Auto code: a hand-typed code (or an interrupted save) may have consumed the
+    // stored number, so step forward until a free one appears — the old single
+    // attempt deadlocked on that collision forever. Persist next+1 only after
+    // the insert actually succeeded.
+    let seq = settings.nextProductNo;
+    for (;;) {
+      if (seq > MAX_PRODUCT_NO) throw new ProductCodeExhaustedError();
+      const product = build(formatProductCode(seq));
+      try {
+        await target.products.add(product);
+      } catch (error) {
+        if (!isConstraintError(error)) throw error;
+        seq += 1;
+        continue;
+      }
+      await setSettings({ nextProductNo: seq + 1 }, target);
+      return product;
+    }
   });
 }
 
@@ -298,8 +329,10 @@ export async function updateProduct(
       barcodes: (merged.barcodes ?? []).map((b) => b.trim()).filter(Boolean),
       packLabel: merged.packLabel?.trim() || DEFAULT_PACK_LABEL,
       packSize: Math.max(1, Math.round(merged.packSize ?? 1)),
-      buyPrice: Math.max(0, Math.round(merged.buyPrice)),
-      retailPrice: Math.max(0, Math.round(merged.retailPrice)),
+      // `?? existing` is belt-and-braces: an explicit-undefined price would
+      // otherwise round to NaN (diffPrices already logs it as a clear-to-zero).
+      buyPrice: Math.max(0, Math.round(merged.buyPrice ?? existing.buyPrice)),
+      retailPrice: Math.max(0, Math.round(merged.retailPrice ?? existing.retailPrice)),
       wholesalePrice:
         merged.wholesalePrice != null ? Math.max(0, Math.round(merged.wholesalePrice)) : undefined,
       minStock: merged.minStock != null ? Math.max(0, Math.round(merged.minStock)) : undefined,
@@ -329,7 +362,9 @@ export async function restoreProduct(id: ID, target: PlascoDb = db): Promise<voi
 }
 
 export async function countProducts(target: PlascoDb = db): Promise<number> {
-  return target.products.count();
+  // Only live rows: Settings prints this as «N کالا» (soft-deleted rows would
+  // overcount it against every other screen).
+  return alive(await target.products.toArray()).length;
 }
 
 // ------------------------------------------------------------------ photos

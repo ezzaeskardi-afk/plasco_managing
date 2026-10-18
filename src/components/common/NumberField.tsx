@@ -82,8 +82,19 @@ export function NumberField({
       onChange(raw);
       return;
     }
-    caretRight.current = digitsRightOf(raw, event.target.selectionStart ?? raw.length);
-    onChange(formatNumber(parsed));
+    const right = digitsRightOf(raw, event.target.selectionStart ?? raw.length);
+    const next = formatNumber(parsed);
+    if (next === value) {
+      // Same displayed string (e.g. deleting a separator): React bails out of
+      // re-rendering and the DOM would keep the raw text. Force the formatted
+      // value back and put the caret on its digit.
+      event.target.value = next;
+      const position = caretFromRight(next, right);
+      event.target.setSelectionRange(position, position);
+      return;
+    }
+    caretRight.current = right;
+    onChange(next);
   };
 
   return (

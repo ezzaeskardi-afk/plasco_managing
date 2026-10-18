@@ -96,27 +96,51 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
     /**
      * انبارگردانی: اختلاف در لحظهٔ اعمال حساب می‌شود و برای هر اختلاف یک حرکت
      * `count` نوشته می‌شود. همه در یک تراکنش؛ یا همه یا هیچ.
+     *
+     * `stockTakeId` برای «ادامهٔ شمارش» یک جلسهٔ نیمه‌کاره است (جلسه‌ای که با
+     * برگرداندن انبارگردانی دوباره باز شده): همان جلسه دوباره ثبت می‌شود و
+     * آیتم‌های قبلی‌اش با شمارش تازه جایگزین می‌شوند — مثل وب که می‌تواند یک
+     * جلسهٔ باز را دوباره اعمال کند.
      */
-    suspend fun applyStockTake(locationId: ID, counts: Map<ID, Int>, note: String? = null): StockTake {
-        // جلسهٔ خالی ثبت نمی‌شود؛ همان محافظی که نسخهٔ وب در applyStockTake دارد.
+    suspend fun applyStockTake(
+        locationId: ID,
+        counts: Map<ID, Int>,
+        note: String? = null,
+        stockTakeId: ID? = null,
+    ): StockTake {
+        // جلسهٔ خالی ثبت نمی‌شود؛ سخت‌سازی آگاهانهٔ اندروید (وب این گارد را ندارد).
         if (counts.isEmpty()) throw IllegalArgumentException("StockTakeEmpty")
         val now = System.currentTimeMillis()
         val take = inTransaction { db ->
-            val id = newId()
-            db.insertOrThrow(
-                "stockTakes",
-                null,
-                ContentValues().apply {
-                    put("id", id)
-                    put("locationId", locationId)
-                    put("status", StockTakeStatus.Open.wire)
-                    put("appliedAt", null as Long?)
-                    put("note", note)
-                    put("createdAt", now)
-                    put("updatedAt", now)
-                    put("deletedAt", null as Long?)
-                },
-            )
+            val id: ID
+            val createdAt: Long
+            if (stockTakeId != null) {
+                val existing = stockTakeById(db, stockTakeId)
+                    ?: throw IllegalArgumentException("StockTakeNotFound")
+                if (existing.status != StockTakeStatus.Open || existing.locationId != locationId) {
+                    throw IllegalStateException("StockTakeNotOpen")
+                }
+                id = stockTakeId
+                createdAt = existing.createdAt
+                db.delete("stockTakeItems", "stockTakeId = ?", arrayOf(id))
+            } else {
+                id = newId()
+                createdAt = now
+                db.insertOrThrow(
+                    "stockTakes",
+                    null,
+                    ContentValues().apply {
+                        put("id", id)
+                        put("locationId", locationId)
+                        put("status", StockTakeStatus.Open.wire)
+                        put("appliedAt", null as Long?)
+                        put("note", note)
+                        put("createdAt", now)
+                        put("updatedAt", now)
+                        put("deletedAt", null as Long?)
+                    },
+                )
+            }
             for ((productId, counted) in counts) {
                 val current = currentQty(db, productId, locationId)
                 db.insertOrThrow(
@@ -146,39 +170,44 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
                 "id = ?",
                 arrayOf(id),
             )
-            StockTake(id, locationId, StockTakeStatus.Applied, now, note, now, now, null)
+            StockTake(id, locationId, StockTakeStatus.Applied, now, note, createdAt, now, null)
         }
         hub.reloadStock()
         hub.reloadStockTakes()
         return take
     }
 
-    /** برگرداندن یک انبارگردانی اعمال‌شده: اختلافی که اعمال شد، جبران می‌شود. */
+    /**
+     * برگرداندن یک انبارگردانی اعمال‌شده — مو‌به‌مو مثل نسخهٔ وب: هر حرکت `count`
+     * این جلسه با یک حرکت جبرانی (`undoOf`) واگرد می‌شود، حرکاتی که قبلاً واگرد
+     * شده‌اند رد می‌شوند، و جلسه به «نیمه‌کاره» برمی‌گردد تا بتوان دوباره
+     * ثبتش کرد (بعداً «ادامهٔ شمارش»).
+     */
     suspend fun revertStockTake(stockTakeId: ID): StockTake {
         val result = inTransaction { db ->
             val take = stockTakeById(db, stockTakeId) ?: throw IllegalArgumentException("StockTakeNotFound")
             if (take.status != StockTakeStatus.Applied) throw IllegalStateException("StockTakeNotApplied")
-            for (item in itemsInside(db, stockTakeId)) {
-                val delta = item.counted - item.systemQtyAtCount
-                if (delta != 0) {
-                    writeMovement(
-                        db,
-                        MovementInput(item.productId, take.locationId, MovementType.Count, -delta, refId = take.id),
-                    )
-                }
+            val movements = db.rawQuery(
+                "SELECT * FROM movements WHERE refId = ? AND type = ? ORDER BY at ASC, createdAt ASC",
+                arrayOf(stockTakeId, MovementType.Count.wire),
+            ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toMovement()) } }
+            for (movement in movements) {
+                if (movement.undoOf != null) continue // خودِ جبران دوباره جبران نمی‌شود
+                if (hasUndo(db, movement.id)) continue // قبلاً (از toast) واگرد شده
+                writeMovement(db, compensating(movement))
             }
             val now = System.currentTimeMillis()
             db.update(
                 "stockTakes",
                 ContentValues().apply {
-                    put("status", StockTakeStatus.Cancelled.wire)
+                    put("status", StockTakeStatus.Open.wire)
                     put("appliedAt", null as Long?)
                     put("updatedAt", now)
                 },
                 "id = ?",
                 arrayOf(stockTakeId),
             )
-            take.copy(status = StockTakeStatus.Cancelled, appliedAt = null, updatedAt = now)
+            take.copy(status = StockTakeStatus.Open, appliedAt = null, updatedAt = now)
         }
         hub.reloadStock()
         hub.reloadStockTakes()

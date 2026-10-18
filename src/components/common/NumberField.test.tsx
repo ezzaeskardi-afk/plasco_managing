@@ -42,6 +42,19 @@ describe('NumberField', () => {
     expect(input.value).toBe('');
   });
 
+  it('keeps the formatted text when deleting a separator changes nothing', () => {
+    render(<Harness group />);
+    const input = screen.getByLabelText('قیمت') as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: '2100000' } });
+    expect(input.value).toBe('۲٬۱۰۰٬۰۰۰');
+
+    // Same number without separators: React would bail out of re-rendering and
+    // the DOM would keep the raw text (the bug this test pins down).
+    fireEvent.change(input, { target: { value: '۲۱۰۰۰۰۰' } });
+    expect(input.value).toBe('۲٬۱۰۰٬۰۰۰');
+  });
+
   it('leaves junk and negatives exactly as typed for validation to catch', () => {
     render(<Harness group />);
     const input = screen.getByLabelText('قیمت') as HTMLInputElement;

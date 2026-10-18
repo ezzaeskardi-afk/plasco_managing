@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/misc';
 import {
   DEFAULT_PACK_LABEL,
   DuplicateCodeError,
+  ProductCodeExhaustedError,
   createProduct,
   deletePhoto,
   getProduct,
@@ -221,6 +222,8 @@ export function ProductFormPage() {
     } catch (error) {
       if (error instanceof DuplicateCodeError) {
         setError('code', { message: fa.products.codeTaken });
+      } else if (error instanceof ProductCodeExhaustedError) {
+        setError('code', { message: fa.products.codeExhausted });
       } else {
         toastError(fa.errors.title, error instanceof Error ? error.message : undefined);
       }

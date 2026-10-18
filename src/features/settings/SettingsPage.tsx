@@ -109,7 +109,20 @@ export function SettingsPage() {
             <Switch
               checked={settings.costLockEnabled}
               onCheckedChange={(value) => {
-                if (!value) void disableCostLock();
+                if (!value) {
+                  void disableCostLock();
+                  setMessage(null);
+                  return;
+                }
+                // Locking without a stored PIN would leave `costVisible` false
+                // with no way to unlock (the box only accepts the PIN hash), so
+                // steer the owner to set one first — `setPin` then enables it.
+                if (settings.costLockPinHash) {
+                  void update({ costLockEnabled: true });
+                  setMessage(null);
+                } else {
+                  setMessage(fa.settings.pinFirst);
+                }
               }}
               label={fa.settings.costLock}
             />
@@ -147,7 +160,6 @@ export function SettingsPage() {
                   </Button>
                 </div>
               )}
-              {message ? <p className="mt-2 text-[0.8rem] text-out">{message}</p> : null}
             </div>
           ) : (
             <div className="mt-4 border-t border-line pt-4">
@@ -181,6 +193,7 @@ export function SettingsPage() {
                   void setPin(pinDraft).then(() => {
                     setPinDraft('');
                     setPinConfirm('');
+                    setMessage(null);
                     toastSuccess(fa.settings.pinSet);
                   });
                 }}
@@ -190,6 +203,7 @@ export function SettingsPage() {
               </Button>
             </div>
           )}
+          {message ? <p className="mt-2 text-[0.8rem] text-out">{message}</p> : null}
         </Panel>
       </Section>
 

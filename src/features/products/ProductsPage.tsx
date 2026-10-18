@@ -288,6 +288,8 @@ export function ProductsPage() {
                 variant="secondary"
                 block
                 onClick={() => {
+                  setTerm('');
+                  setDebounced('');
                   setParams(new URLSearchParams(), { replace: true });
                   setFiltersOpen(false);
                 }}

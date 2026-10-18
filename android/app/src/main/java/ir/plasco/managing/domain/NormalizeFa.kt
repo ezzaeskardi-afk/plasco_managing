@@ -19,7 +19,9 @@ private val ARABIC_TO_PERSIAN: List<Pair<Char, Char>> = listOf(
 // اعراب عربی، کشیده و نویسه‌های نامرئی جهت‌دهی.
 private val DIACRITICS = Regex("""[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]""")
 private val INVISIBLE = Regex("""[\u200B-\u200F\u202A-\u202E\uFEFF]""")
-private val WHITESPACE = Regex("""\s+""")
+// `\s` کاتلین فقط ASCII است ولی `\s` جاوااسکریپت (نسخهٔ وب) یونیکد؛ این مجموعه
+// باید مو‌به‌مو همان باشد وگرنه فاصلهٔ باریک/تمام‌عرض متن را جدا نمی‌کند.
+private val WHITESPACE = Regex("""[\t\n\u000B\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+""")
 
 private const val PERSIAN_DIGITS = "\u06F0\u06F1\u06F2\u06F3\u06F4\u06F5\u06F6\u06F7\u06F8\u06F9"
 private const val ARABIC_DIGITS = "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669"

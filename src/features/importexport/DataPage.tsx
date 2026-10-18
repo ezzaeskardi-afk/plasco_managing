@@ -113,11 +113,12 @@ export function DataPage() {
           { name: 'موجودی', header: levelHeader, rows: levelRows },
         ]);
         await saveBlob(blob, `plasco-products-${stamp()}.xlsx`);
+        toastSuccess(fa.importexport.exportExcel);
       } else {
         const blob = buildCsv(productHeader, productRows);
         await saveBlob(blob, `plasco-products-${stamp()}.csv`);
+        toastSuccess(fa.importexport.exportCsv);
       }
-      toastSuccess(fa.importexport.exportExcel);
     } catch (error) {
       toastError(fa.errors.title, error instanceof Error ? error.message : undefined);
     } finally {

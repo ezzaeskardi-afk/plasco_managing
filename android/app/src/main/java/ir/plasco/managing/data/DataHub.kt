@@ -162,7 +162,8 @@ class DataHub(private val helper: PlascoDb) {
         }
 
     private fun readStockTakes(db: android.database.sqlite.SQLiteDatabase): List<StockTake> =
-        db.rawQuery("SELECT * FROM stockTakes WHERE deletedAt IS NULL ORDER BY updatedAt DESC LIMIT 20", null).use { cursor ->
+        // مثل وب همهٔ جلسه‌ها، تازه‌ترین اول (وب با createdAt مرتب می‌کند).
+        db.rawQuery("SELECT * FROM stockTakes WHERE deletedAt IS NULL ORDER BY createdAt DESC", null).use { cursor ->
             buildList { while (cursor.moveToNext()) add(cursor.toStockTake()) }
         }
 

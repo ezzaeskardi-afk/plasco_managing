@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PlascoDb, ensureDefaults, DEFAULT_SETTINGS } from './dexie';
 import {
   DuplicateCodeError,
+  ProductCodeExhaustedError,
+  countProducts,
   createBrand,
   createLocation,
   createProduct,
@@ -110,6 +112,22 @@ describe('products', () => {
     await expect(createProduct(draft({ code: 'DUP' }), db)).rejects.toBeInstanceOf(DuplicateCodeError);
   });
 
+  it('skips taken codes instead of deadlocking on the stored number', async () => {
+    // A hand-typed code can consume the number the sequence points at; the old
+    // single attempt then failed forever on every later auto save.
+    await createProduct(draft({ code: 'P-00005' }), db);
+    await setSettings({ nextProductNo: 5 }, db);
+    const product = await createProduct(draft(), db);
+    expect(product.code).toBe('P-00006');
+    expect((await getSettings(db)).nextProductNo).toBe(7);
+  });
+
+  it('raises ProductCodeExhaustedError past the last code', async () => {
+    await createProduct(draft({ code: 'P-9999999' }), db);
+    await setSettings({ nextProductNo: 9_999_999 }, db);
+    await expect(createProduct(draft(), db)).rejects.toBeInstanceOf(ProductCodeExhaustedError);
+  });
+
   it('normalizes the search name', async () => {
     const product = await createProduct(
       draft({ name: 'ظرف غذا', variant: 'قرمز - \u06F1\u06F0 \u0644\u06CC\u062A\u0631\u06CC' }),
@@ -124,6 +142,13 @@ describe('products', () => {
     const product = await createProduct(draft(), db);
     await softDelete('products', product.id, db);
     expect((await db.products.get(product.id))?.deletedAt).toBeTypeOf('number');
+  });
+
+  it('counts only live products', async () => {
+    const product = await createProduct(draft(), db);
+    await createProduct(draft({ name: 'سطل' }), db);
+    await softDelete('products', product.id, db);
+    expect(await countProducts(db)).toBe(1);
   });
 
   it('rounds money to integers', async () => {

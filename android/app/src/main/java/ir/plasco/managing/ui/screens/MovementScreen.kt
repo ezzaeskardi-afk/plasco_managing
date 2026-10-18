@@ -1,5 +1,6 @@
 package ir.plasco.managing.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -70,7 +72,6 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     val levels by container.hub.levels.collectAsStateWithLifecycle()
     val locations by container.hub.locations.collectAsStateWithLifecycle()
     val brands by container.hub.brands.collectAsStateWithLifecycle()
-    val settings by container.hub.settings.collectAsStateWithLifecycle()
 
     var action by remember {
         mutableStateOf(
@@ -90,7 +91,6 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     var cartons by remember { mutableStateOf("") }
     var perCarton by remember { mutableStateOf("") }
     var pieces by remember { mutableStateOf("") }
-    var unitPrice by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var decrease by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -108,6 +108,21 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     val perCartonEntered = parseIntegerInput(perCarton) ?: 0
     val qty = cartonPieces(cartonsEntered, perCartonEntered, parseIntegerInput(pieces) ?: 0)
     val perCartonMissing = cartonsEntered > 0 && perCartonEntered < 2
+
+    // استپرهای ±۱/±۱۰ عدد کل را عوض می‌کنند و دوباره به کارتن + عدد باز می‌شکنند
+    // (همان bump نسخهٔ وب: با «تعداد در کارتن» معتبر، تقسیم؛ وگرنه همه در «عدد»).
+    fun bump(delta: Int) {
+        val next = maxOf(0, qty + delta)
+        if (perCartonEntered >= 2) {
+            val count = next / perCartonEntered
+            val loose = next - count * perCartonEntered
+            cartons = if (count == 0) "" else count.toString()
+            pieces = if (loose == 0) "" else loose.toString()
+        } else {
+            cartons = ""
+            pieces = if (next == 0) "" else next.toString()
+        }
+    }
 
     // «تعداد در کارتن» از خود کالا می‌آید؛ با عوض شدن کالا عددهای فرم صفر می‌شوند
     // تا تعداد یک کالا روی کالای بعدی ننشیند (به‌جای چسبیدن به کالای قبلی).
@@ -145,7 +160,6 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                             locationId = locationId,
                             type = action.type ?: MovementType.Adjust,
                             qty = signed,
-                            unitPrice = parseIntegerInput(unitPrice),
                             note = note.ifBlank { null },
                         ),
                     )
@@ -285,20 +299,25 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                 Spacer(Modifier.height(8.dp))
                 NumberField(Fa.movements.pieces, pieces, { pieces = it })
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "${Fa.movements.qty}: ${formatNumber(qty)}",
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                if (action == Action.Receive || action == Action.Sale) {
-                    Spacer(Modifier.height(8.dp))
-                    NumberField(
-                        Fa.movements.unitPrice,
-                        unitPrice,
-                        { unitPrice = it },
-                        groupThousands = true,
-                        suffix = settings.currencyLabel.ifBlank { "تومان" },
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "${Fa.movements.qty}: ${formatNumber(qty)}",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyLarge,
                     )
+                    Row {
+                        OutlinedButton(onClick = { bump(-10) }) { Text("−۱۰") }
+                        Spacer(Modifier.width(4.dp))
+                        OutlinedButton(onClick = { bump(-1) }) { Text("−۱") }
+                        Spacer(Modifier.width(4.dp))
+                        OutlinedButton(onClick = { bump(1) }) { Text("+۱") }
+                        Spacer(Modifier.width(4.dp))
+                        OutlinedButton(onClick = { bump(10) }) { Text("+۱۰") }
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 TextField(Fa.movements.note, note, { note = it })

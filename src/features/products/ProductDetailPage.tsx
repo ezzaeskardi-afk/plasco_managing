@@ -89,7 +89,7 @@ export function ProductDetailPage() {
               {product.barcodes.join(' · ')}
             </p>
           ) : null}
-          {!product.active ? <p className="mt-1 text-[0.8rem] text-low">{fa.products.deleted}</p> : null}
+          {!product.active ? <p className="mt-1 text-[0.8rem] text-low">{fa.products.inactive}</p> : null}
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className="tnum text-[2rem] font-extrabold leading-tight text-ink">

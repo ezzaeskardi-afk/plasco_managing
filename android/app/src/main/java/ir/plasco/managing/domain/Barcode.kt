@@ -7,17 +7,19 @@ import ir.plasco.managing.model.Product
  *
  * خواندن با دوربین ممکن است رقم فارسی، فاصله یا خط تیره برگرداند و بارکد یک کالا
  * ممکن است ۱۲ رقمی (UPC-A) یا ۱۳ رقمی با صفر ابتدایی (EAN-13) ذخیره شده باشد؛
- * هر دو یک کالا هستند، پس هر دو شکل بررسی می‌شود.
+ * فقط همین دو شکل یک کالا هستند، پس فقط همین دو شکل بررسی می‌شود.
  */
 fun normalizeBarcode(raw: String): String = normalizeFa(raw).filter { it.isLetterOrDigit() }
 
-/** همهٔ شکل‌هایی که یک بارکد ممکن است با آن ذخیره شده باشد. */
+/** همهٔ شکل‌هایی که یک بارکد ممکن است با آن ذخیره شده باشد (فقط UPC-A ↔ EAN-13). */
 fun barcodeKeys(raw: String): List<String> {
     val value = normalizeBarcode(raw)
     if (value.isEmpty()) return emptyList()
     val keys = linkedSetOf(value)
-    keys += value.trimStart('0').ifEmpty { "0" }
-    if (value.length == 12) keys += "0$value"
+    when {
+        value.length == 12 -> keys += "0$value"
+        value.length == 13 && value.startsWith("0") -> keys += value.substring(1)
+    }
     return keys.toList()
 }
 

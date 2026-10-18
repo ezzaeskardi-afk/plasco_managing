@@ -81,7 +81,7 @@ export function LabelsPage() {
                     aria-label={fa.actions.delete}
                     onClick={() => {
                       void softDelete(kind, item.id).then(() => {
-                        toastUndo(fa.settings.removeConfirm, async () => {
+                        toastUndo(fa.settings.removed, async () => {
                           await restore(kind, item.id);
                         });
                       });

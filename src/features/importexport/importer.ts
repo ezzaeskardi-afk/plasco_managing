@@ -3,6 +3,7 @@ import { recordImportBatch } from '@/db/imports';
 import { applyMovement } from '@/db/movements';
 import {
   DuplicateCodeError,
+  ProductCodeExhaustedError,
   buildNameN,
   createBrand,
   createProduct,
@@ -429,7 +430,7 @@ export async function commitRows(
               }
             }
           } catch (error) {
-            if (error instanceof DuplicateCodeError) {
+            if (error instanceof DuplicateCodeError || error instanceof ProductCodeExhaustedError) {
               result.failed += 1;
               continue;
             }

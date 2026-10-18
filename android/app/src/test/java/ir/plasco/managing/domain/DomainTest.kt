@@ -27,6 +27,15 @@ class NormalizeFaTest {
     @Test
     fun `whitespace collapses and latin is lowercased`() {
         assertEquals("p-00001 \u0638\u0631\u0641", normalizeFa("  P-00001   \u0638\u0631\u0641  "))
+        // فاصلهٔ سخت (NBSP) و نیم‌فاصله هم مثل `\s` جاوااسکریپت به فاصلهٔ ساده می‌شوند.
+        assertEquals(
+            "\u0638\u0631\u0641 \u0628\u0632\u0631\u06AF",
+            normalizeFa("\u0638\u0631\u0641\u00A0\u0628\u0632\u0631\u06AF"),
+        )
+        assertEquals(
+            "\u0638\u0631\u0641 \u0628\u0632\u0631\u06AF",
+            normalizeFa("\u0638\u0631\u0641\u202F\u0628\u0632\u0631\u06AF"),
+        )
     }
 
     @Test
@@ -51,6 +60,10 @@ class NumbersTest {
         assertEquals(12500.0, parseNumberInput("12,500")!!, 0.0)
         assertEquals(12500.0, parseNumberInput("12٬500")!!, 0.0)
         assertEquals(12.5, parseNumberInput("۱۲٫۵")!!, 0.0)
+        // فاصله‌های یونیکد هم مثل `\s` نسخهٔ وب جداکننده‌اند (NBSP، باریک، تمام‌عرض).
+        assertEquals(12500.0, parseNumberInput("12\u00A0500")!!, 0.0)
+        assertEquals(12500.0, parseNumberInput("12\u202F500")!!, 0.0)
+        assertEquals(12500.0, parseNumberInput("12\u3000500")!!, 0.0)
     }
 
     @Test
@@ -58,12 +71,18 @@ class NumbersTest {
         assertNull(parseNumberInput(""))
         assertNull(parseNumberInput("سلام"))
         assertNull(parseNumberInput("۱۲٫"))
+        // «٫۵» بدون رقم صحیح عدد نیست (هم‌رفتار با نسخهٔ وب؛ قبلاً ۰٫۵ می‌شد).
+        assertNull(parseNumberInput("٫۵"))
+        assertNull(parseNumberInput(".5"))
     }
 
     @Test
     fun `integer parsing rounds`() {
         assertEquals(13, parseIntegerInput("12.6"))
         assertEquals(-5, parseIntegerInput("−۵"))
+        // عددی که در Int جا نمی‌شود null می‌دهد، نه مقدار بریده.
+        assertNull(parseIntegerInput("999999999999999"))
+        assertEquals(2_000_000_000, parseIntegerInput("2000000000"))
     }
 
     @Test
@@ -283,5 +302,30 @@ class StockTest {
         assertEquals("2", exact.first().product.id)
         assertEquals(1, searchProducts("ظرف بزرگ", products).size)
         assertEquals(0, searchProducts("ظرف یخچال", products).size)
+    }
+
+    @Test
+    fun `search scores follow the web index`() {
+        val products = listOf(
+            product("code").copy(name = "بیسکویت", code = "P-00012"),
+            product("name").copy(name = "P-00012 بیسکویت", code = "P-00099"),
+            product("barcode").copy(name = "چیزی", code = "P-00077", barcodes = listOf("6001234567890")),
+        )
+        // کد دقیق (۹۰۰) بر پیشوند نام (۷۰۰) و توکن (۵۰۱) مقدم است.
+        assertEquals("code", searchProducts("P-00012", products).first().product.id)
+        // پیشوند کد (۸۰۰) هم از بقیه جلوتر است.
+        assertEquals("code", searchProducts("P-0001", products).first().product.id)
+        // بارکد دقیق (۱۰۰۰) بالاترین امتیاز را دارد.
+        assertEquals("barcode", searchProducts("6001234567890", products).first().product.id)
+        assertEquals(1000, searchProducts("6001234567890", products).first().score)
+    }
+
+    @Test
+    fun `token matching is prefix based like the web`() {
+        val products = listOf(product("1").copy(name = "ظرف غذای بزرگ", code = "P-00001"))
+        // «غذا» پیشوند توکن «غذای» است و کافی است.
+        assertEquals(1, searchProducts("غذا", products).size)
+        assertEquals(1, searchProducts("ظرف بزرگ", products).size)
+        assertEquals(0, searchProducts("ظرف کوچک", products).size)
     }
 }

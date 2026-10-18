@@ -19,7 +19,7 @@ data class NewProduct(
     val brandId: ID? = null,
     val categoryId: ID? = null,
     val barcodes: List<String> = emptyList(),
-    val packLabel: String = "عدد",
+    val packLabel: String = "کارتن",
     val packSize: Int = 1,
     val buyPrice: Int = 0,
     val retailPrice: Int = 0,
@@ -52,7 +52,7 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
                 brandId = input.brandId,
                 categoryId = input.categoryId,
                 barcodes = input.barcodes.filter { it.isNotBlank() },
-                packLabel = input.packLabel.ifBlank { "عدد" },
+                packLabel = input.packLabel.ifBlank { "کارتن" },
                 packSize = maxOf(1, input.packSize),
                 buyPrice = maxOf(0, input.buyPrice),
                 retailPrice = maxOf(0, input.retailPrice),
@@ -65,7 +65,7 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
             )
             db.insertOrThrow("products", null, created.toValues())
             if (input.initialQty != 0 && input.locationId != null) {
-                writeInitialMovement(db, created.id, input.locationId, input.initialQty, now)
+                writeInitialMovement(db, created.id, input.locationId, input.initialQty, now, created.buyPrice)
             }
             created
         }
@@ -85,8 +85,13 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
         } ?: throw IllegalArgumentException("ProductNotFound")
 
         // همان محدودیت‌های نسخهٔ وب: قیمت منفی نداریم و بسته حداقل یکی است.
+        // nameN مثل وب از نام + variant + family ساخته می‌شود تا ردیف‌های قدیمی
+        // که هنوز این دو فیلد را دارند در جست‌وجو گم نشوند.
         val updated = product.copy(
-            nameN = normalizeFa(product.name),
+            nameN = normalizeFa(
+                listOfNotNull(product.name, product.variant, product.family)
+                    .filter { it.isNotBlank() }.joinToString(" "),
+            ),
             updatedAt = now,
             packSize = maxOf(1, product.packSize),
             buyPrice = maxOf(0, product.buyPrice),
@@ -100,7 +105,7 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
             if (updated.code != before.code && codeExists(db, updated.code)) {
                 throw IllegalArgumentException("DuplicateProductCode")
             }
-            db.update("products", updated.toValues(), "id = ?", arrayOf(updated.id))
+            db.update("products", updated.toUpdateValues(), "id = ?", arrayOf(updated.id))
             for ((field, oldValue, newValue) in diffPrices(before, updated)) {
                 db.insertOrThrow(
                     "priceChanges",
@@ -153,17 +158,25 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
         hub.reloadProducts()
     }
 
-    suspend fun priceHistory(productId: ID, limit: Int = 30): List<PriceChange> = withContext(Dispatchers.IO) {
+    suspend fun priceHistory(productId: ID): List<PriceChange> = withContext(Dispatchers.IO) {
         helper.readableDatabase
-            .rawQuery("SELECT * FROM priceChanges WHERE productId = ? ORDER BY at DESC LIMIT ?", arrayOf(productId, limit.toString()))
+            .rawQuery("SELECT * FROM priceChanges WHERE productId = ? ORDER BY at DESC", arrayOf(productId))
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toPriceChange()) } }
     }
 
     /**
      * موجودی اولیه هم از راه موتور حرکات می‌رود، نه با نوشتن مستقیم روی
-     * `stockLevels` — همان قانون نسخهٔ وب (فقط یک نویسندهٔ موجودی).
+     * `stockLevels` — همان قانون نسخهٔ وب (فقط یک نویسندهٔ موجودی). `unitCost`
+     * مثل وب قیمت خریدِ همان لحظه است.
      */
-    private fun writeInitialMovement(db: SQLiteDatabase, productId: ID, locationId: ID, qty: Int, at: Long) {
+    private fun writeInitialMovement(
+        db: SQLiteDatabase,
+        productId: ID,
+        locationId: ID,
+        qty: Int,
+        at: Long,
+        unitCost: Int,
+    ) {
         stock.writeMovementInTransaction(
             db,
             MovementInput(
@@ -171,23 +184,29 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
                 locationId = locationId,
                 type = MovementType.Initial,
                 qty = qty,
+                unitCost = unitCost,
                 at = at,
             ),
         )
     }
 
-    /** شمارهٔ بعدی؛ اگر کدش دستی گرفته شده باشد، جلو می‌رود تا تکراری نشود. */
+    /**
+     * شمارهٔ بعدی؛ اگر از این شماره کدها گرفته شده باشند جلو می‌رود تا تکراری
+     * نشود و اگر شماره‌ها ته بکشند خطای خوانا می‌دهد (نه کد تکراری).
+     */
     private fun nextCode(db: SQLiteDatabase): String {
         var no = db.rawQuery("SELECT nextProductNo FROM settings WHERE id = 1", null).use { cursor ->
             if (cursor.moveToFirst()) cursor.getInt(0) else 1
         }
-        while (no < MAX_PRODUCT_NO) {
+        while (true) {
+            if (no > MAX_PRODUCT_NO) throw IllegalStateException("ProductCodeExhausted")
             val code = "P-" + padStartOrPlain(no, 5)
-            if (!codeExists(db, code)) break
+            if (!codeExists(db, code)) {
+                db.update("settings", ContentValues().apply { put("nextProductNo", no + 1) }, "id = 1", null)
+                return code
+            }
             no += 1
         }
-        db.update("settings", ContentValues().apply { put("nextProductNo", no + 1) }, "id = 1", null)
-        return "P-" + padStartOrPlain(no, 5)
     }
 
     private fun codeExists(db: SQLiteDatabase, code: String): Boolean =

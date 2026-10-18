@@ -33,6 +33,14 @@ class BarcodeTest {
     }
 
     @Test
+    fun `only the twelve and thirteen digit shapes are equivalent`() {
+        // قاعدهٔ قدیمی هر تعداد صفر ابتدایی را می‌بُرید؛ حالا فقط UPC-A ↔ EAN-13.
+        assertEquals(listOf("00123"), barcodeKeys("00123"))
+        assertEquals(listOf("6001234567890"), barcodeKeys("6001234567890"))
+        assertEquals(listOf("06001234567890"), barcodeKeys("06001234567890"))
+    }
+
+    @Test
     fun `list text is split, cleaned and deduplicated`() {
         assertEquals(
             listOf("111", "222"),

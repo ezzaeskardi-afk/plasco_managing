@@ -114,7 +114,13 @@ private val TABLES: List<TableSpec> = listOf(
     ),
     TableSpec(
         "movements",
-        baseColumns() + listOf(
+        listOf(
+            // برخلاف بقیهٔ جدول‌ها، حرکات ستون deletedAt ندارند (جدول SQLite هم
+            // ندارد)؛ اگر فایلِ وب این کلید را داشته باشد اصلاً خوانده نمی‌شود،
+            // وگرنه درج با ستون ناموجود، کل بازیابی را می‌شکست.
+            Column("id", Kind.Text),
+            Column("createdAt", Kind.Int),
+            Column("updatedAt", Kind.Int),
             Column("productId", Kind.Text),
             Column("locationId", Kind.Text),
             Column("type", Kind.Text),
@@ -228,6 +234,10 @@ class BackupRepo(
                 val rows = data.optJSONArray(spec.name) ?: JSONArray()
                 for (index in 0 until rows.length()) {
                     val row = rows.optJSONObject(index) ?: throw BackupInvalidException("${spec.name}:${index}")
+                    // اول تصمیم «نوشته می‌شود یا نه»، بعد شمارهٔ تازه: ردیفی که
+                    // نسخهٔ موجودش تازه‌تر است اصلاً دست نمی‌خورد و نباید کد
+                    // تداخل‌دارش را عوض کند یا شمارندهٔ renumbered را بالا ببرد.
+                    if (shouldSkip(db, spec, row, mode)) continue
                     if (spec.name == "products") {
                         val code = row.optString("code")
                         if (code.isNotEmpty() && codeTakenByOther(db, code, row.optString("id"))) {
@@ -286,7 +296,8 @@ class BackupRepo(
         }
         if (!parsed.has("tables")) throw BackupInvalidException("tables-missing")
         val version = parsed.optInt("schemaVersion", -1)
-        if (version < 0) throw BackupInvalidException("schema-missing")
+        // صفر هم مثل «ندارد» رد می‌شود؛ قالب بکاپ از نسل ۱ شروع می‌شود.
+        if (version <= 0) throw BackupInvalidException("schema-missing")
         if (version > BACKUP_SCHEMA_VERSION) throw BackupInvalidException("schema-newer:$version")
         val tables = parsed.optJSONObject("tables") ?: throw BackupInvalidException("tables-missing")
         return ParsedBackup(tables, parsed.optLong("exportedAt", 0L))
@@ -369,9 +380,36 @@ class BackupRepo(
         return rows
     }
 
-    /** یک ردیف را می‌نویسد. false یعنی در حالت ادغام، نسخهٔ موجود تازه‌تر بود. */
+    /**
+     * در حالت ادغام، ردیفی که نسخهٔ موجودش تازه‌تر (یا هم‌سن) است اصلاً نوشته
+     * نمی‌شود. جدا از [writeRow] است تا پیش از هر تغییری (مثل شمارهٔ تازهٔ کد
+     * تداخل‌دار) معلوم باشد ردیف واقعاً می‌نشیند یا نه.
+     */
+    private fun shouldSkip(db: SQLiteDatabase, spec: TableSpec, row: JSONObject, mode: RestoreMode): Boolean {
+        if (mode != RestoreMode.Merge) return false
+        if (spec.columns.none { it.key == "updatedAt" }) return false
+        val key = rowKey(spec, row) ?: return false
+        val incoming = row.optLong("updatedAt", 0L)
+        val existing = db.query(spec.name, arrayOf("updatedAt"), key.first, key.second, null, null, null)
+            .use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+        return existing != null && existing >= incoming
+    }
+
+    /** کلید ردیف برای پرس‌وجوی «وجود دارد یا نه» — stockLevels کلید ترکیبی دارد. */
+    private fun rowKey(spec: TableSpec, row: JSONObject): Pair<String, Array<String>>? {
+        if (spec.name == "stockLevels") {
+            val productId = row.optString("productId").takeIf { it.isNotEmpty() } ?: return null
+            val locationId = row.optString("locationId").takeIf { it.isNotEmpty() } ?: return null
+            return "productId = ? AND locationId = ?" to arrayOf(productId, locationId)
+        }
+        val id = row.optString(spec.idColumn).takeIf { it.isNotEmpty() } ?: return null
+        return "${spec.idColumn} = ?" to arrayOf(id)
+    }
+
+    /** یک ردیف را می‌نویسد. false یعنی کلید ردیف خالی بود و دور ریخته شد. */
     private fun writeRow(db: SQLiteDatabase, spec: TableSpec, row: JSONObject, mode: RestoreMode): Boolean {
         // ردیف‌هایی که کلید اصلی‌شان خالی است دور ریخته می‌شوند.
+        val key = rowKey(spec, row) ?: return false
         val values = ContentValues()
         for (column in spec.columns) {
             if (!row.has(column.key)) continue
@@ -393,31 +431,13 @@ class BackupRepo(
                 }
             }
         }
-        // هیچ‌وقت کلید اصلی خالی نمی‌ماند.
-        if (values.getAsString(spec.idColumn) == null) return false
-        val where = if (spec.name == "stockLevels") "productId = ? AND locationId = ?"
-        else "${spec.idColumn} = ?"
-        val args = if (spec.name == "stockLevels") {
-            arrayOf(values.getAsString("productId"), values.getAsString("locationId"))
-        } else {
-            arrayOf(values.getAsString(spec.idColumn))
-        }
         // جدول‌هایی مثل priceChanges ستون updatedAt ندارند؛ آن‌ها همیشه می‌نشینند.
-        val hasUpdatedAt = spec.columns.any { it.key == "updatedAt" }
-        if (mode == RestoreMode.Merge && hasUpdatedAt) {
-            val incomingUpdated = row.optLong("updatedAt", 0L)
-            val existing = db.query(
-                spec.name,
-                arrayOf("updatedAt"),
-                where,
-                args,
-                null,
-                null,
-                null,
-            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
-            if (existing != null && existing >= incomingUpdated) return false
-            if (existing != null) {
-                db.update(spec.name, values, where, args)
+        // (ردیفِ «تازه‌تر نبود» را shouldSkip قبل از رسیدن به اینجا گرفته است.)
+        if (mode == RestoreMode.Merge && spec.columns.any { it.key == "updatedAt" }) {
+            val exists = db.query(spec.name, arrayOf("updatedAt"), key.first, key.second, null, null, null)
+                .use { it.moveToFirst() }
+            if (exists) {
+                db.update(spec.name, values, key.first, key.second)
                 return true
             }
         }

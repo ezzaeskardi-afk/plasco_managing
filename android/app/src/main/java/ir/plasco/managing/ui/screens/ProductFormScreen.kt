@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.plasco.managing.data.InsufficientStockException
 import ir.plasco.managing.data.NewProduct
 import ir.plasco.managing.domain.findProductByBarcode
 import ir.plasco.managing.domain.displayProductName
@@ -414,7 +415,14 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
 internal fun messageFor(error: Throwable): String = when {
     error.message?.contains("DuplicateProductCode") == true -> Fa.errors.duplicateCode
     error.message?.contains("ProductCodeExhausted") == true -> Fa.errors.codeExhausted
-    error.message?.contains("InsufficientStock") == true -> Fa.errors.insufficient
+    // مثل نسخهٔ وب: فقط «موجودی کافی نیست» نه؛ می‌گوید همین حالا چند عدد هست.
+    error.message?.contains("InsufficientStock") == true -> {
+        val available = (error as? InsufficientStockException)?.available
+        val hint = available?.let {
+            Fa.movements.insufficientHint.replace("{available}", formatNumber(it))
+        }
+        if (hint == null) Fa.movements.insufficient else "${Fa.movements.insufficient} $hint"
+    }
     error.message?.contains("MovementQtyMustBeNonZero") == true -> Fa.movements.enterQty
     error.message?.contains("AlreadyUndone") == true -> Fa.errors.alreadyUndone
     error.message?.contains("TransferSameLocation") == true -> Fa.movements.transferSame

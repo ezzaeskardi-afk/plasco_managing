@@ -255,7 +255,7 @@ fun ScreenHeader(
 
 /** نام فارسی هر نوع حرکت — مو‌به‌مو مثل `MOVEMENT_LABELS` نسخهٔ وب (`features/stock/labels.ts`). */
 fun movementLabel(type: MovementType): String = when (type) {
-    MovementType.Initial -> "اول کار"
+    MovementType.Initial -> Fa.movements.initial
     MovementType.Receive -> "ورود"
     MovementType.Sale -> "فروش"
     MovementType.ReturnIn -> "برگشتی از مشتری"

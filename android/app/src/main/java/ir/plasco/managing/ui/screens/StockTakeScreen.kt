@@ -78,9 +78,12 @@ fun StockTakeScreen(onBack: () -> Unit) {
     }
 
     // فقط متن‌های عددی معتبر شمرده می‌شوند؛ «اعمال» هم از همین نقشه تغذیه می‌شود
-    // تا جلسهٔ خالی ثبت نشود (همان محافظی که نسخهٔ وب دارد).
+    // تا جلسهٔ خالی ثبت نشود (همان محافظی که نسخهٔ وب دارد). منفی هم مثل نامعتبر
+    // دور ریخته می‌شود تا شمارندهٔ تغییرات ردیف قرمز را نشمارد (وب اجازهٔ ثبتش نمی‌دهد).
     val counted = remember(counts.toMap()) {
-        counts.mapNotNull { (productId, text) -> parseIntegerInput(text)?.let { productId to it } }.toMap()
+        counts.mapNotNull { (productId, text) ->
+            parseIntegerInput(text)?.takeIf { it >= 0 }?.let { productId to it }
+        }.toMap()
     }
 
     // تعداد کالاهایی که واقعاً عوض می‌شوند — همان هشداری که نسخهٔ وب می‌دهد.
@@ -192,10 +195,15 @@ fun StockTakeScreen(onBack: () -> Unit) {
                     )
                 }
                 Spacer(Modifier.width(8.dp))
+                // مقدار منفی معنادار نیست؛ همان‌جا کادر قرمز می‌شود (وب هم در
+                // «ذخیره» ردش می‌کند) — تا فقط در لحظهٔ «ثبت شمارش» معلوم نشود.
+                val text = counts[product.id].orEmpty()
+                val parsed = parseIntegerInput(text)
                 OutlinedTextField(
-                    value = counts[product.id].orEmpty(),
+                    value = text,
                     onValueChange = { counts[product.id] = it },
                     label = { Text(Fa.stocktake.counted) },
+                    isError = text.isNotBlank() && (parsed == null || parsed < 0),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     textStyle = MaterialTheme.typography.bodyLarge,
@@ -251,11 +259,12 @@ fun StockTakeScreen(onBack: () -> Unit) {
                             onClick = {
                                 scope.launch {
                                     val saved = container.stock.itemsOf(take.id)
-                                    val activeIds = active.map { it.id }.toSet()
                                     locationId = take.locationId
                                     counts.clear()
-                                    saved.filter { it.productId in activeIds }
-                                        .forEach { counts[it.productId] = it.counted.toString() }
+                                    // همهٔ شمارش‌های جلسه برمی‌گردند — حتی کالایی که
+                                    // از آن موقع غیرفعال شده؛ وب هم آیتم‌ها را
+                                    // بی‌فیلتر برمی‌گرداند و در «ثبت شمارش» حساب می‌کند.
+                                    saved.forEach { counts[it.productId] = it.counted.toString() }
                                     resumeId = take.id
                                 }
                             },
@@ -271,7 +280,9 @@ fun StockTakeScreen(onBack: () -> Unit) {
         BarcodeScannerDialog(
             onResult = { code ->
                 scanOpen = false
-                val found = findProductByBarcode(active, code)
+                // مثل نسخهٔ وب در میان همهٔ کالاهای زنده می‌گردد؛ بارکد کالای
+                // غیرفعال هم باید پیدا شود، وگرنه «پیدا نشد» دروغ است.
+                val found = findProductByBarcode(products, code)
                 if (found == null) {
                     showMessage(Fa.scan.notFound + " " + code)
                 } else {
@@ -305,16 +316,23 @@ fun StockTakeScreen(onBack: () -> Unit) {
                         )
                     }
                     Spacer(Modifier.height(8.dp))
+                    // همان راهنمای دیالوگ وب: «با دوربین بارکد کالا را بخوان…»
+                    Text(
+                        Fa.stocktake.scanHint,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
                     NumberField(Fa.stocktake.counted, scanCount, { scanCount = it })
                     Spacer(Modifier.height(8.dp))
                     Row {
                         OutlinedButton(
-                            onClick = { scanCount = ((parseIntegerInput(scanCount) ?: 0) + 1).toString() },
-                        ) { Text("+۱") }
-                        Spacer(Modifier.width(8.dp))
-                        OutlinedButton(
                             onClick = { scanCount = maxOf(0, (parseIntegerInput(scanCount) ?: 0) - 1).toString() },
                         ) { Text("−۱") }
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(
+                            onClick = { scanCount = ((parseIntegerInput(scanCount) ?: 0) + 1).toString() },
+                        ) { Text("+۱") }
                     }
                 }
             },

@@ -67,9 +67,6 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
-/** یک بارکد چند بار پشت‌سرهم خوانده می‌شود؛ تا این مدت دوباره گزارش نمی‌شود. */
-private const val DEDUP_WINDOW_MS = 1_500L
-
 /**
  * خواندن بارکد با دوربین گوشی.
  *
@@ -127,10 +124,15 @@ private fun CameraScanner(onResult: (String) -> Unit, onClose: () -> Unit, hint:
     var camera by remember { mutableStateOf<Camera?>(null) }
     var torchOn by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
+    // بدون فلش، دکمهٔ چراغ بی‌اثر است؛ فقط وقتی دوربین بالاآمد و فلش داشت نشانش می‌دهیم.
+    val hasFlash = camera?.cameraInfo?.hasFlashUnit() == true
     // لامبدای بیرونی ممکن است عوض شود؛ تحلیلگر باید همیشه تازه‌ترین را صدا بزند.
     val currentOnResult by rememberUpdatedState(onResult)
 
     DisposableEffect(lifecycleOwner) {
+        // اگر دیالوگ قبل از آماده‌شدن دوربین بسته شود، شنوندهٔ آینده نباید دیگر
+        // دوربین را ببندد (وگرنه بعد از دیسپوز، نشتی و کار با اسکنر بسته).
+        var disposed = false
         // اگر خوانندهٔ بارکد روی این گوشی بالا نیاید، پیام فارسی می‌دهیم نه کرش.
         val scanner = runCatching {
             BarcodeScanning.getClient(
@@ -141,6 +143,7 @@ private fun CameraScanner(onResult: (String) -> Unit, onClose: () -> Unit, hint:
         val onMain = java.util.concurrent.Executor { command -> Handler(Looper.getMainLooper()).post(command) }
         future.addListener(
             {
+                if (disposed) return@addListener
                 try {
                     val provider = future.get()
                     providerRef.set(provider)
@@ -171,6 +174,7 @@ private fun CameraScanner(onResult: (String) -> Unit, onClose: () -> Unit, hint:
             onMain,
         )
         onDispose {
+            disposed = true
             providerRef.get()?.unbindAll()
             scanner?.close()
             executor.shutdown()
@@ -178,7 +182,7 @@ private fun CameraScanner(onResult: (String) -> Unit, onClose: () -> Unit, hint:
     }
 
     LaunchedEffect(torchOn, camera) {
-        camera?.cameraControl?.enableTorch(torchOn)
+        if (hasFlash) camera?.cameraControl?.enableTorch(torchOn)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -188,16 +192,27 @@ private fun CameraScanner(onResult: (String) -> Unit, onClose: () -> Unit, hint:
             modifier = Modifier.fillMaxSize().systemBarsPadding().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(
-                    onClick = onClose,
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
-                ) { Text(Fa.scan.close) }
-                Spacer(Modifier.weight(1f))
-                TextButton(
-                    onClick = { torchOn = !torchOn },
-                    colors = ButtonDefaults.textButtonColors(contentColor = if (torchOn) Color.Yellow else Color.White),
-                ) { Text(Fa.scan.torch) }
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // عنوان مثل نسخهٔ وب، وسط نوار بالا؛ دکمه‌ها رویش قرار می‌گیرند.
+                Text(
+                    Fa.scan.title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = onClose,
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
+                    ) { Text(Fa.scan.close) }
+                    Spacer(Modifier.weight(1f))
+                    if (hasFlash) {
+                        TextButton(
+                            onClick = { torchOn = !torchOn },
+                            colors = ButtonDefaults.textButtonColors(contentColor = if (torchOn) Color.Yellow else Color.White),
+                        ) { Text(Fa.scan.torch) }
+                    }
+                }
             }
 
             Spacer(Modifier.weight(1f))
@@ -222,12 +237,19 @@ private fun CameraScanner(onResult: (String) -> Unit, onClose: () -> Unit, hint:
 /**
  * هر فریم را به ML Kit می‌دهد؛ عکس تا پایان پردازش بسته نمی‌شود (وگرنه ML Kit
  * فریم را از دست می‌دهد) و فقط فریم‌های تازه تحلیل می‌شوند.
+ *
+ * مقدار فقط **یک بار** تحویل می‌شود: دیالوگ با اولین بارکد بسته می‌شود و فریم‌های
+ * بعدیِ در راه نباید دوباره صفحهٔ بعد را باز کنند (قبلاً پنجرهٔ ضدتکرار این را
+ * پوشش می‌داد که با تأخیر بسته‌شدن دیالوگ، دوبار باز شدن را جلو نمی‌گرفت).
  */
 @AndroidxOptIn(ExperimentalGetImage::class)
 private fun barcodeAnalyzer(scanner: BarcodeScanner, onValue: (String) -> Unit): ImageAnalysis.Analyzer {
-    var lastValue = ""
-    var lastAt = 0L
+    var delivered = false
     return ImageAnalysis.Analyzer { image ->
+        if (delivered) {
+            image.close()
+            return@Analyzer
+        }
         val mediaImage = image.image
         if (mediaImage == null) {
             image.close()
@@ -236,12 +258,10 @@ private fun barcodeAnalyzer(scanner: BarcodeScanner, onValue: (String) -> Unit):
         val input = InputImage.fromMediaImage(mediaImage, image.imageInfo.rotationDegrees)
         scanner.process(input)
             .addOnSuccessListener { barcodes ->
-                val value = barcodes.firstNotNullOfOrNull { it.rawValue?.takeIf(String::isNotBlank) }
+                if (delivered) return@addOnSuccessListener
+                val value = barcodes.firstNotNullOfOrNull { it.rawValue?.trim()?.takeIf(String::isNotBlank) }
                     ?: return@addOnSuccessListener
-                val now = System.currentTimeMillis()
-                if (value == lastValue && now - lastAt < DEDUP_WINDOW_MS) return@addOnSuccessListener
-                lastValue = value
-                lastAt = now
+                delivered = true
                 onValue(value)
             }
             .addOnCompleteListener { image.close() }

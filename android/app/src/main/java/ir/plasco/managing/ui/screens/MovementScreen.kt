@@ -91,8 +91,8 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     var cartons by remember { mutableStateOf("") }
     var perCarton by remember { mutableStateOf("") }
     var pieces by remember { mutableStateOf("") }
+    var targetQty by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
-    var decrease by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var scanOpen by remember { mutableStateOf(false) }
 
@@ -129,6 +129,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     LaunchedEffect(selected?.id) {
         cartons = ""
         pieces = ""
+        targetQty = ""
         val size = selected?.packSize ?: 0
         perCarton = if (size > 1) size.toString() else ""
     }
@@ -139,8 +140,48 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
             showMessage(Fa.movements.pickProduct)
             return
         }
+        // «اصلاح» تعدادِ «درست» می‌گیرد نه تعداد حرکت: تفاوتش با موجودی همین
+        // مکان همین‌جا حساب می‌شود (همان «تعداد درست» نسخهٔ وب).
+        if (action == Action.Adjust) {
+            val target = parseIntegerInput(targetQty)
+            if (target == null || target < 0) {
+                showMessage(Fa.movements.enterQty)
+                return
+            }
+            val delta = target - qtyAtLocation
+            if (delta == 0) {
+                showMessage(Fa.movements.zeroQty)
+                return
+            }
+            busy = true
+            scope.launch {
+                try {
+                    container.stock.apply(
+                        MovementInput(
+                            productId = product.id,
+                            locationId = locationId,
+                            type = MovementType.Adjust,
+                            qty = delta,
+                            note = note.ifBlank { null },
+                        ),
+                    )
+                    showMessage(Fa.movements.saved)
+                    onDone()
+                } catch (error: Throwable) {
+                    showMessage(messageFor(error))
+                } finally {
+                    busy = false
+                }
+            }
+            return
+        }
         if (qty == 0) {
             showMessage(Fa.movements.enterQty)
+            return
+        }
+        // انتقال بدون مقصد (یا با مقصدِ خودِ مبدأ) نباید حرکت بسازد.
+        if (action == Action.Transfer && (toLocationId.isBlank() || locationId == toLocationId)) {
+            showMessage(Fa.movements.transferSame)
             return
         }
         busy = true
@@ -149,11 +190,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                 if (action == Action.Transfer) {
                     container.stock.transfer(product.id, locationId, toLocationId, qty, note.ifBlank { null })
                 } else {
-                    val signed = when {
-                        action.type == MovementType.Adjust && decrease -> -qty
-                        action.outgoing -> -qty
-                        else -> qty
-                    }
+                    val signed = if (action.outgoing) -qty else qty
                     container.stock.apply(
                         MovementInput(
                             productId = product.id,
@@ -167,7 +204,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                 // «تعداد در کارتن» تایپ‌شده روی سر خود کالا می‌نشیند تا دفعهٔ بعد
                 // پیش‌پر باشد؛ فقط تنظیمات کالاست، نه بخشی از خود حرکت.
                 val perCartonSize = parseIntegerInput(perCarton) ?: 0
-                if (action != Action.Adjust && perCartonSize >= 2 && perCartonSize != product.packSize) {
+                if (perCartonSize >= 2 && perCartonSize != product.packSize) {
                     runCatching {
                         container.products.update(
                             product.copy(
@@ -204,17 +241,6 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                 onSelect = { name -> action = Action.valueOf(name) },
                 modifier = Modifier.padding(horizontal = 12.dp),
             )
-        }
-
-        if (action == Action.Adjust) {
-            item {
-                ChipRow(
-                    options = listOf("false" to "افزایش", "true" to "کاهش"),
-                    selected = decrease.toString(),
-                    onSelect = { decrease = it == "true" },
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
-            }
         }
 
         if (selected == null) {
@@ -254,7 +280,13 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
             }
         }
 
-        item { SectionTitle(Fa.movements.location, Modifier.padding(horizontal = 12.dp)) }
+        item {
+            SectionTitle(
+                // انتقال دو سر دارد: «از مکان» و «به مکان» — مثل نسخهٔ وب.
+                if (action == Action.Transfer) Fa.movements.fromLocation else Fa.movements.location,
+                Modifier.padding(horizontal = 12.dp),
+            )
+        }
         item {
             ChipRow(
                 options = locations.map { it.id to it.name },
@@ -263,10 +295,11 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                 modifier = Modifier.padding(horizontal = 12.dp),
             )
         }
-        if (selected != null) {
+        // مثل نسخهٔ وب، برای انتقال موجودی مبدأ نشان داده نمی‌شود.
+        if (selected != null && action != Action.Transfer) {
             item {
                 Text(
-                    "${Fa.movements.pieces} در این مکان: ${formatNumber(qtyAtLocation)}",
+                    "${Fa.movements.currentQty} ${formatNumber(qtyAtLocation)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -275,7 +308,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
         }
 
         if (action == Action.Transfer) {
-            item { SectionTitle(Fa.movements.to, Modifier.padding(horizontal = 12.dp)) }
+            item { SectionTitle(Fa.movements.toLocation, Modifier.padding(horizontal = 12.dp)) }
             item {
                 ChipRow(
                     options = locations.filter { it.id != locationId }.map { it.id to it.name },
@@ -288,35 +321,46 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
 
         item {
             Panel(modifier = Modifier.padding(12.dp)) {
-                NumberField(Fa.movements.cartons, cartons, { cartons = it })
-                Spacer(Modifier.height(8.dp))
-                NumberField(
-                    Fa.movements.perCarton,
-                    perCarton,
-                    { perCarton = it },
-                    supporting = if (perCartonMissing) Fa.movements.perCartonNeeded else null,
-                )
-                Spacer(Modifier.height(8.dp))
-                NumberField(Fa.movements.pieces, pieces, { pieces = it })
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        "${Fa.movements.qty}: ${formatNumber(qty)}",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyLarge,
+                if (action == Action.Adjust) {
+                    // «اصلاح» تعداد حرکت نمی‌گیرد؛ تعداد «درست» را می‌گیرد و
+                    // تفاوتش را خودش حساب می‌کند — عیناً مثل نسخهٔ وب.
+                    NumberField(
+                        Fa.movements.adjustTarget,
+                        targetQty,
+                        { targetQty = it },
+                        supporting = Fa.movements.adjustHelp,
                     )
-                    Row {
-                        OutlinedButton(onClick = { bump(-10) }) { Text("−۱۰") }
-                        Spacer(Modifier.width(4.dp))
-                        OutlinedButton(onClick = { bump(-1) }) { Text("−۱") }
-                        Spacer(Modifier.width(4.dp))
-                        OutlinedButton(onClick = { bump(1) }) { Text("+۱") }
-                        Spacer(Modifier.width(4.dp))
-                        OutlinedButton(onClick = { bump(10) }) { Text("+۱۰") }
+                } else {
+                    NumberField(Fa.movements.cartons, cartons, { cartons = it })
+                    Spacer(Modifier.height(8.dp))
+                    NumberField(
+                        Fa.movements.perCarton,
+                        perCarton,
+                        { perCarton = it },
+                        supporting = if (perCartonMissing) Fa.movements.perCartonNeeded else null,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    NumberField(Fa.movements.pieces, pieces, { pieces = it })
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            "${Fa.movements.liveTotal}: ${formatNumber(qty)}",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Row {
+                            OutlinedButton(onClick = { bump(-10) }) { Text("−۱۰") }
+                            Spacer(Modifier.width(4.dp))
+                            OutlinedButton(onClick = { bump(-1) }) { Text("−۱") }
+                            Spacer(Modifier.width(4.dp))
+                            OutlinedButton(onClick = { bump(1) }) { Text("+۱") }
+                            Spacer(Modifier.width(4.dp))
+                            OutlinedButton(onClick = { bump(10) }) { Text("+۱۰") }
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))

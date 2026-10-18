@@ -1,11 +1,16 @@
 package ir.plasco.managing.ui.screens
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -27,18 +32,36 @@ import ir.plasco.managing.ui.components.EmptyState
 import ir.plasco.managing.ui.components.ProductRow
 import ir.plasco.managing.ui.components.ScreenHeader
 
+/**
+ * فهرست کالاها. از خانه می‌شود با فیلتر آمادهٔ مکان/برند/دسته وارد شد
+ * (`products?location=…`) — همان کاری که کلیک روی ردیف‌های تفکیک داشبورد وب می‌کند.
+ */
 @Composable
-fun ProductsScreen(onOpenProduct: (ID) -> Unit, onNewProduct: () -> Unit) {
+fun ProductsScreen(
+    onOpenProduct: (ID) -> Unit,
+    onNewProduct: () -> Unit,
+    initialLocationId: String = "",
+    initialBrandId: String = "",
+    initialCategoryId: String = "",
+) {
     val container = LocalAppContainer.current
     val products by container.hub.products.collectAsStateWithLifecycle()
     val levels by container.hub.levels.collectAsStateWithLifecycle()
     val brands by container.hub.brands.collectAsStateWithLifecycle()
     val categories by container.hub.categories.collectAsStateWithLifecycle()
+    val locations by container.hub.locations.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
+    var locationFilter by rememberSaveable { mutableStateOf(initialLocationId) }
+    var brandFilter by rememberSaveable { mutableStateOf(initialBrandId) }
+    var categoryFilter by rememberSaveable { mutableStateOf(initialCategoryId) }
 
     val totals = remember(levels) { productTotals(levels) }
     val brandNames = remember(brands) { brands.associate { it.id to it.name } }
     val categoryNames = remember(categories) { categories.associate { it.id to it.name } }
+    // کالاهایی که در این مکان موجودی مثبت دارند — قاعدهٔ فیلتر مکان نسخهٔ وب.
+    val positiveAt = remember(levels) {
+        levels.asSequence().filter { it.qty > 0 }.map { it.productId to it.locationId }.toHashSet()
+    }
     val index = remember(products, brandNames, categoryNames) {
         ProductSearchIndex(products, brandNames, categoryNames)
     }
@@ -46,11 +69,18 @@ fun ProductsScreen(onOpenProduct: (ID) -> Unit, onNewProduct: () -> Unit) {
     val results = remember(query, index) {
         if (query.isBlank()) index.all() else index.search(query).map { it.product }
     }
+    val filtered = remember(results, locationFilter, brandFilter, categoryFilter, positiveAt) {
+        results.filter { product ->
+            (locationFilter.isEmpty() || positiveAt.contains(product.id to locationFilter)) &&
+                (brandFilter.isEmpty() || product.brandId == brandFilter) &&
+                (categoryFilter.isEmpty() || product.categoryId == categoryFilter)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ScreenHeader(
             title = Fa.products.title,
-            subtitle = "${results.size} کالا",
+            subtitle = "${filtered.size} کالا",
             action = { Button(onClick = onNewProduct) { Text(Fa.products.newProduct) } },
         )
         OutlinedTextField(
@@ -61,13 +91,35 @@ fun ProductsScreen(onOpenProduct: (ID) -> Unit, onNewProduct: () -> Unit) {
             textStyle = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.padding(horizontal = 12.dp),
         )
+        if (locationFilter.isNotEmpty() || brandFilter.isNotEmpty() || categoryFilter.isNotEmpty()) {
+            Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                if (locationFilter.isNotEmpty()) {
+                    ActiveFilterChip(
+                        label = locations.firstOrNull { it.id == locationFilter }?.name ?: Fa.common.unknown,
+                        onClear = { locationFilter = "" },
+                    )
+                }
+                if (brandFilter.isNotEmpty()) {
+                    ActiveFilterChip(
+                        label = brandNames[brandFilter] ?: Fa.common.unknown,
+                        onClear = { brandFilter = "" },
+                    )
+                }
+                if (categoryFilter.isNotEmpty()) {
+                    ActiveFilterChip(
+                        label = categoryNames[categoryFilter] ?: Fa.common.unknown,
+                        onClear = { categoryFilter = "" },
+                    )
+                }
+            }
+        }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             if (products.isEmpty()) {
                 item { EmptyState(Fa.products.empty, Fa.products.newProduct, onNewProduct) }
-            } else if (results.isEmpty()) {
+            } else if (filtered.isEmpty()) {
                 item { EmptyState(Fa.products.noResult) }
             } else {
-                items(results, key = { it.id }) { product ->
+                items(filtered, key = { it.id }) { product ->
                     ProductRow(
                         product = product,
                         total = totals[product.id] ?: 0,
@@ -79,3 +131,18 @@ fun ProductsScreen(onOpenProduct: (ID) -> Unit, onNewProduct: () -> Unit) {
         }
     }
 }
+
+/** چیپ فیلتر فعال با ضربدر پاک‌کردن — مثل چیپ‌های صفحهٔ کالاهای وب. */
+@Composable
+private fun ActiveFilterChip(label: String, onClear: () -> Unit) {
+    FilterChip(
+        selected = true,
+        onClick = onClear,
+        label = { Text(label) },
+        trailingIcon = {
+            Icon(Icons.Filled.Close, contentDescription = Fa.common.delete, modifier = Modifier.padding(0.dp))
+        },
+        modifier = Modifier.padding(end = 8.dp),
+    )
+}
+

@@ -60,6 +60,7 @@ import kotlinx.coroutines.launch
 object Routes {
     const val Home = "home"
     const val Products = "products"
+    const val ProductsFiltered = "products?location={locationId}&brand={brandId}&category={categoryId}"
     const val ProductNew = "products/new"
     const val ProductEdit = "products/{id}"
     const val Movements = "movements"
@@ -69,6 +70,16 @@ object Routes {
     const val Data = "more/data"
 
     fun productEdit(id: ID) = "products/$id"
+
+    /** کالاها با فیلتر آماده — کلیک روی ردیف‌های «مکان/برند/دسته» خانه به اینجا می‌رسد. */
+    fun productsFiltered(locationId: String? = null, brandId: String? = null, categoryId: String? = null): String {
+        val query = buildList {
+            if (!locationId.isNullOrEmpty()) add("location=$locationId")
+            if (!brandId.isNullOrEmpty()) add("brand=$brandId")
+            if (!categoryId.isNullOrEmpty()) add("category=$categoryId")
+        }
+        return if (query.isEmpty()) Products else "products?" + query.joinToString("&")
+    }
 
     fun movementNew(productId: ID? = null, type: String? = null): String {
         val query = buildList {
@@ -145,13 +156,35 @@ fun AppRoot(container: AppContainer) {
                             composable(Routes.Home) {
                                 HomeScreen(
                                     onOpenProduct = { id -> navController.navigate(Routes.productEdit(id)) },
-                                    onNewMovement = { navController.navigate(Routes.movementNew()) },
+                                    onNewProduct = { navController.navigate(Routes.ProductNew) },
+                                    onNewMovement = { type -> navController.navigate(Routes.movementNew(type = type)) },
+                                    onOpenMovements = { navController.navigate(Routes.Movements) },
+                                    onOpenBackup = { navController.navigate(Routes.Data) },
+                                    onOpenFiltered = { location, brand, category ->
+                                        navController.navigate(Routes.productsFiltered(location, brand, category))
+                                    },
                                 )
                             }
                             composable(Routes.Products) {
                                 ProductsScreen(
                                     onOpenProduct = { id -> navController.navigate(Routes.productEdit(id)) },
                                     onNewProduct = { navController.navigate(Routes.ProductNew) },
+                                )
+                            }
+                            composable(
+                                route = Routes.ProductsFiltered,
+                                arguments = listOf(
+                                    navArgument("locationId") { type = NavType.StringType; defaultValue = "" },
+                                    navArgument("brandId") { type = NavType.StringType; defaultValue = "" },
+                                    navArgument("categoryId") { type = NavType.StringType; defaultValue = "" },
+                                ),
+                            ) { entry ->
+                                ProductsScreen(
+                                    onOpenProduct = { id -> navController.navigate(Routes.productEdit(id)) },
+                                    onNewProduct = { navController.navigate(Routes.ProductNew) },
+                                    initialLocationId = entry.arguments?.getString("locationId").orEmpty(),
+                                    initialBrandId = entry.arguments?.getString("brandId").orEmpty(),
+                                    initialCategoryId = entry.arguments?.getString("categoryId").orEmpty(),
                                 )
                             }
                             composable(Routes.ProductNew) {
@@ -221,7 +254,7 @@ private fun BottomBar(navController: NavHostController, route: String?) {
         tabs.forEach { tab ->
             val selected = when (tab.route) {
                 Routes.Products ->
-                    route == Routes.Products || route == Routes.ProductNew || route == Routes.ProductEdit
+                    route?.startsWith(Routes.Products) == true
                 Routes.MovementNew -> route?.startsWith(Routes.MovementNew) == true
                 Routes.More -> route == Routes.More || route == Routes.Data
                 else -> route == tab.route

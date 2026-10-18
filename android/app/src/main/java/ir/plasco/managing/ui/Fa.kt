@@ -33,7 +33,6 @@ object Fa {
     }
 
     object home {
-        const val title = "خانه"
         const val pieces = "تعداد کل"
         const val sku = "چند نوع کالا"
         const val costValue = "ارزش خرید"
@@ -44,9 +43,14 @@ object Fa {
         const val lowEmpty = "هیچ کالایی کم نیست."
         const val outEmpty = "هیچ کالایی تمام نشده."
         const val backupReminder = "بیش از ۷ روز است که بکاپ نگرفته‌ای."
-        const val byLocation = "موجودی هر مکان"
+        const val backupNow = "گرفتن بکاپ"
+        const val quickTitle = "کارهای سریع"
+        const val byLocation = "مکان به مکان"
+        const val byBrand = "برند به برند"
+        const val byCategory = "دسته به دسته"
         const val recentTitle = "حرکات اخیر"
         const val recentEmpty = "هنوز ورود و خروجی ثبت نشده."
+        const val viewAll = "دیدن همه"
     }
 
     object products {
@@ -190,6 +194,7 @@ object Fa {
         const val lastBackup = "آخرین بکاپ"
         const val never = "هرگز"
         const val about = "درباره"
+        const val version = "نسخه"
         const val aboutBody =
             "نسخهٔ اندروید پلاسکو منیجینگ. همهٔ داده‌ها روی خود گوشی می‌مانند و برنامه به اینترنت نیازی ندارد."
         const val costLock = "پنهان‌کردن قیمت خرید و سود"

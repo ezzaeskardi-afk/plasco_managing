@@ -185,6 +185,51 @@ class StockTest {
     }
 
     @Test
+    fun `valuation groups by location brand and category`() {
+        val products = listOf(
+            product("a", buy = 100, retail = 200).copy(brandId = "brand-1", categoryId = "cat-1"),
+            product("b", buy = 100, retail = 300).copy(brandId = "brand-1"),
+            product("c", active = false).copy(brandId = "brand-2"),
+        )
+        val levels = listOf(
+            StockLevel("a", "loc-shop", 5, null, 0),
+            StockLevel("b", "loc-shop", 2, null, 0),
+            StockLevel("a", "loc-warehouse", 0, null, 0),
+            StockLevel("a", "loc-basement", 3, null, 0),
+        )
+        val summary = valuate(products, levels)
+        // مکان: سطح صفر نباید گروه بسازد؛ مرتب‌سازی با ارزش فروش نزولی.
+        assertEquals(listOf("loc-shop", "loc-basement"), summary.byLocation.map { it.id })
+        val shop = summary.byLocation.first()
+        assertEquals(7, shop.pieces)
+        assertEquals(2, shop.skuCount)
+        assertEquals(700L, shop.cost) // ۵×۱۰۰ + ۲×۱۰۰
+        assertEquals(1_600L, shop.retail) // ۵×۲۰۰ + ۲×۳۰۰
+        // برند/دسته: کالای غیرفعال نیاید و کالای بی‌دسته گروه «دسته» نسازد.
+        assertEquals(listOf("brand-1"), summary.byBrand.map { it.id })
+        assertEquals(10, summary.byBrand.first().pieces)
+        assertEquals(2, summary.byBrand.first().skuCount)
+        assertEquals(listOf("cat-1"), summary.byCategory.map { it.id })
+        assertEquals(8, summary.byCategory.first().pieces) // ۵ + ۳ در دو مکان
+        assertEquals(1, summary.byCategory.first().skuCount)
+    }
+
+    @Test
+    fun `group sort breaks ties by pieces`() {
+        val products = listOf(
+            product("a", buy = 100, retail = 200).copy(brandId = "brand-a"),
+            product("b", buy = 100, retail = 200).copy(brandId = "brand-b"),
+        )
+        val levels = listOf(
+            StockLevel("b", "loc-shop", 7, null, 0),
+            StockLevel("a", "loc-shop", 2, null, 0),
+        )
+        val summary = valuate(products, levels)
+        // ارزش فروش برابر → تعداد بیشتر اول.
+        assertEquals(listOf("brand-b", "brand-a"), summary.byBrand.map { it.id })
+    }
+
+    @Test
     fun `alerts list low and out products`() {
         val products = listOf(product("low", min = 5), product("out", min = 1), product("fine", min = 1))
         val levels = listOf(

@@ -73,7 +73,15 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     val settings by container.hub.settings.collectAsStateWithLifecycle()
 
     var action by remember {
-        mutableStateOf(Action.entries.firstOrNull { it.type?.wire == initialType } ?: Action.Receive)
+        mutableStateOf(
+            // «انتقال» تایپ تک‌حرکتی ندارد (دو ساق transfer_out/transfer_in دارد)؛
+            // برای همین جداگانه تطبیق داده می‌شود.
+            if (initialType == "transfer") {
+                Action.Transfer
+            } else {
+                Action.entries.firstOrNull { it.type?.wire == initialType } ?: Action.Receive
+            },
+        )
     }
     var productId by remember { mutableStateOf(initialProductId) }
     var locationId by remember(locations) { mutableStateOf(locations.firstOrNull()?.id.orEmpty()) }

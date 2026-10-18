@@ -57,23 +57,32 @@ data class ValuationSummary(
     val productCount: Int = 0,
     val cost: Long = 0,
     val retail: Long = 0,
+    val byLocation: List<GroupValuation> = emptyList(),
+    val byBrand: List<GroupValuation> = emptyList(),
+    val byCategory: List<GroupValuation> = emptyList(),
 ) {
     val potentialProfit: Long get() = retail - cost
 }
 
+private fun sortedGroups(acc: Map<ID, GroupValuation>): List<GroupValuation> =
+    acc.values.sortedWith(compareByDescending<GroupValuation> { it.retail }.thenByDescending { it.pieces })
+
 /**
  * ارزش‌گذاری: خرید = Σ(تعداد × buyPrice)، فروش = Σ(تعداد × retailPrice)،
  * سود بالقوه = فروش − خرید. کالای غیرفعال حساب نمی‌شود و تعداد ≤ ۰ صفر می‌شود.
+ * سه گروه مکان/برند/دسته هم مثل `src/domain/valuation.ts` ساخته می‌شوند تا خانه
+ * بتواند مثل نسخهٔ وب تفکیک نشان دهد.
  */
 fun valuate(products: List<Product>, levels: List<StockLevel>): ValuationSummary {
     val totals = productTotals(levels)
+    val active = products.filter { it.active && it.deletedAt == null }
+    val activeById: Map<ID, Product> = active.associateBy { it.id }
     var pieces = 0
     var skuCount = 0
     var productCount = 0
     var cost = 0L
     var retail = 0L
-    for (product in products) {
-        if (!product.active || product.deletedAt != null) continue
+    for (product in active) {
         productCount += 1
         val total = maxOf(0, totals[product.id] ?: 0)
         if (total <= 0) continue
@@ -82,7 +91,59 @@ fun valuate(products: List<Product>, levels: List<StockLevel>): ValuationSummary
         cost += total.toLong() * product.buyPrice
         retail += total.toLong() * product.retailPrice
     }
-    return ValuationSummary(pieces, skuCount, productCount, cost, retail)
+
+    // مکان: هر سطح مثبت یک سهم است (کالای غیرفعال یا حذف‌شده حساب نمی‌شود).
+    val locationAcc = HashMap<ID, GroupValuation>()
+    for (level in levels) {
+        if (level.qty <= 0) continue
+        val product = activeById[level.productId] ?: continue
+        val current = locationAcc[level.locationId] ?: GroupValuation(level.locationId)
+        locationAcc[level.locationId] = current.copy(
+            pieces = current.pieces + level.qty,
+            skuCount = current.skuCount + 1,
+            cost = current.cost + level.qty.toLong() * product.buyPrice,
+            retail = current.retail + level.qty.toLong() * product.retailPrice,
+        )
+    }
+
+    // برند و دسته: هر کالای دارای موجودی یک سهم است.
+    val brandAcc = HashMap<ID, GroupValuation>()
+    val categoryAcc = HashMap<ID, GroupValuation>()
+    for (product in active) {
+        val total = maxOf(0, totals[product.id] ?: 0)
+        if (total <= 0) continue
+        val costShare = total.toLong() * product.buyPrice
+        val retailShare = total.toLong() * product.retailPrice
+        product.brandId?.let { brandId ->
+            val current = brandAcc[brandId] ?: GroupValuation(brandId)
+            brandAcc[brandId] = current.copy(
+                pieces = current.pieces + total,
+                skuCount = current.skuCount + 1,
+                cost = current.cost + costShare,
+                retail = current.retail + retailShare,
+            )
+        }
+        product.categoryId?.let { categoryId ->
+            val current = categoryAcc[categoryId] ?: GroupValuation(categoryId)
+            categoryAcc[categoryId] = current.copy(
+                pieces = current.pieces + total,
+                skuCount = current.skuCount + 1,
+                cost = current.cost + costShare,
+                retail = current.retail + retailShare,
+            )
+        }
+    }
+
+    return ValuationSummary(
+        pieces = pieces,
+        skuCount = skuCount,
+        productCount = productCount,
+        cost = cost,
+        retail = retail,
+        byLocation = sortedGroups(locationAcc),
+        byBrand = sortedGroups(brandAcc),
+        byCategory = sortedGroups(categoryAcc),
+    )
 }
 
 data class StockAlertRow(val product: Product, val total: Int, val state: StockState)

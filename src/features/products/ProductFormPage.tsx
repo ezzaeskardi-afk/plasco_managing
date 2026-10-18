@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ImagePlus, Trash2 } from 'lucide-react';
+import { ImagePlus, ScanLine, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -20,16 +20,19 @@ import {
   listBrands,
   listCategories,
   listLocations,
+  listProducts,
   putPhoto,
   updateProduct,
 } from '@/db/repos';
 import { applyMovement } from '@/db/movements';
 import type { Brand, Category, Location, Product } from '@/db/types';
-import { formatNumber } from '@/domain/format';
+import { matchProductByBarcode, normalizeBarcode, parseBarcodeList } from '@/domain/barcode';
+import { displayProductName, formatNumber } from '@/domain/format';
 import { parseIntegerInput } from '@/domain/numbers';
 import { fa } from '@/i18n/fa';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { useSettings } from '@/app/settings-context';
+import { Scanner } from '@/features/scan/Scanner';
 import { fileToPhoto, usePhotoUrl } from './photo';
 
 // No field blocks saving (AGENTS.md section 25): an empty name is stored empty
@@ -132,6 +135,7 @@ export function ProductFormPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoCleared, setPhotoCleared] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -153,6 +157,25 @@ export function ProductFormPage() {
     [photoFile],
   );
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  const handleScan = async (raw: string) => {
+    setScanOpen(false);
+    const code = normalizeBarcode(raw);
+    if (!code) {
+      toastError(fa.scan.notFound);
+      return;
+    }
+    // The same barcode on another row is a shop mistake worth stopping here.
+    const others = (await listProducts()).filter((product) => product.id !== id);
+    const owner = matchProductByBarcode(others, code);
+    if (owner) {
+      toastError(fa.scan.otherProduct.replace('{name}', displayProductName(owner.name)));
+      return;
+    }
+    const merged = [...new Set([...parseBarcodeList(watch('barcodes')), code])];
+    setValue('barcodes', merged.join('\n'));
+    toastSuccess(fa.scan.added);
+  };
 
   useEffect(() => {
     void Promise.all([listBrands(), listCategories(), listLocations()]).then(
@@ -422,7 +445,7 @@ export function ProductFormPage() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={fa.products.barcodes} htmlFor="barcodes">
+          <Field label={fa.products.barcodes} htmlFor="barcodes" hint={fa.products.barcodesHint}>
             <Textarea
               id="barcodes"
               dir="ltr"
@@ -430,6 +453,16 @@ export function ProductFormPage() {
               placeholder={fa.products.barcodePlaceholder}
               {...register('barcodes')}
             />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="mt-2"
+              onClick={() => setScanOpen(true)}
+            >
+              <ScanLine className="size-4" />
+              {fa.scan.addWithCamera}
+            </Button>
           </Field>
           <Field label={fa.common.note} htmlFor="note">
             <Textarea id="note" {...register('note')} />
@@ -469,6 +502,8 @@ export function ProductFormPage() {
           </Button>
         )}
       </div>
+
+      <Scanner open={scanOpen} onClose={() => setScanOpen(false)} onResult={(code) => void handleScan(code)} />
     </form>
   );
 }

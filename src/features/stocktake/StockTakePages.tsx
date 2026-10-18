@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ClipboardList, Plus, Search } from 'lucide-react';
+import { ClipboardList, Plus, ScanLine, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -7,10 +7,12 @@ import { StockStack } from '@/components/common/StockStack';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { EmptyState, Select, Switch } from '@/components/ui/misc';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { applyStockTake, revertStockTake } from '@/db/stocktake';
 import { listLocations, listProducts, listStockLevels } from '@/db/repos';
 import { db } from '@/db/dexie';
-import type { ID, StockTake, StockTakeItem } from '@/db/types';
+import type { ID, Product, StockTake, StockTakeItem } from '@/db/types';
+import { matchProductByBarcode } from '@/domain/barcode';
 import { displayProductName, formatJalali, formatQty } from '@/domain/format';
 import { parseIntegerInput } from '@/domain/numbers';
 import { buildSearchIndex, searchIndex } from '@/domain/search';
@@ -18,6 +20,7 @@ import { fa } from '@/i18n/fa';
 import { MoneyText } from '@/components/common/Kpi';
 import { newId } from '@/lib/id';
 import { toastError, toastSuccess, toastUndo } from '@/lib/toast';
+import { Scanner } from '@/features/scan/Scanner';
 import { useSettings } from '@/app/settings-context';
 
 export function StockTakeListPage() {
@@ -148,6 +151,9 @@ export function StockTakeCountPage() {
   const [term, setTerm] = useState('');
   const [openId, setOpenId] = useState<ID | null>(null);
   const [draft, setDraft] = useState('');
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanTarget, setScanTarget] = useState<Product | null>(null);
+  const [scanDraft, setScanDraft] = useState('');
 
   const countedMap = useMemo(
     () => new Map((items ?? []).map((item) => [item.productId, item])),
@@ -236,6 +242,48 @@ export function StockTakeCountPage() {
     setDraft('');
   };
 
+  const handleScan = (code: string) => {
+    setScanOpen(false);
+    const found = matchProductByBarcode(products ?? [], code);
+    if (!found) {
+      toastError(`${fa.scan.notFound} ${code}`);
+      return;
+    }
+    const existing = countedMap.get(found.id);
+    setScanTarget(found);
+    setScanDraft(existing ? String(existing.counted) : '');
+  };
+
+  const closeScanTarget = () => {
+    setScanTarget(null);
+    setScanDraft('');
+  };
+
+  // Same behavior as the phone: an empty box removes the count silently, junk
+  // keeps the dialog open, and «ثبت و بارکد بعدی» hands the camera back.
+  const saveScan = async (next: boolean) => {
+    const target = scanTarget;
+    if (!target) return;
+    if (!scanDraft.trim()) {
+      const existing = countedMap.get(target.id);
+      if (existing) await db.stockTakeItems.delete(existing.id);
+      closeScanTarget();
+      if (next) setScanOpen(true);
+      return;
+    }
+    const value = parseIntegerInput(scanDraft);
+    if (value == null || value < 0) {
+      toastError(fa.stock.enterQty);
+      return;
+    }
+    await saveCount(target.id, value);
+    toastSuccess(fa.stocktake.scanned);
+    closeScanTarget();
+    if (next) setScanOpen(true);
+  };
+
+  const existingScanCount = scanTarget ? countedMap.get(scanTarget.id) : undefined;
+
   return (
     <div className="mx-auto max-w-[860px] pb-10">
       <div className="mb-3">
@@ -251,14 +299,20 @@ export function StockTakeCountPage() {
         </div>
       </div>
 
-      <div className="relative mb-3">
-        <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-5 text-crate" />
-        <Input
-          value={term}
-          onChange={(event) => setTerm(event.target.value)}
-          placeholder={fa.stocktake.searchPlaceholder}
-          className="ps-10"
-        />
+      <div className="mb-3 flex items-start gap-2">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-5 text-crate" />
+          <Input
+            value={term}
+            onChange={(event) => setTerm(event.target.value)}
+            placeholder={fa.stocktake.searchPlaceholder}
+            className="ps-10"
+          />
+        </div>
+        <Button variant="secondary" onClick={() => setScanOpen(true)}>
+          <ScanLine className="size-5" />
+          {fa.scan.button}
+        </Button>
       </div>
 
       {/* Virtualized: a location can hold thousands of products. */}
@@ -365,6 +419,47 @@ export function StockTakeCountPage() {
           {fa.stocktake.discard}
         </Button>
       </div>
+
+      {scanTarget ? (
+        <Sheet open onOpenChange={(next) => (next ? undefined : closeScanTarget())}>
+          <SheetContent title={displayProductName(scanTarget.name)}>
+            <p dir="ltr" className="text-start text-[0.8rem] text-crate">
+              {scanTarget.code}
+            </p>
+            <p className="mt-1 text-[0.8rem] text-crate">
+              {fa.common.pieces} در این مکان:{' '}
+              <span className="tnum">{formatQty(systemQty.get(scanTarget.id) ?? 0)}</span>
+            </p>
+            {existingScanCount ? (
+              <p className="mt-1 text-[0.8rem] text-basin">
+                {fa.stocktake.countedBefore.replace('{count}', formatQty(existingScanCount.counted))}
+              </p>
+            ) : null}
+            <p className="mt-2 text-[0.8rem] text-crate">{fa.stocktake.scanHint}</p>
+            <div className="mt-3">
+              <Label htmlFor="scanCount">{fa.stocktake.counted}</Label>
+              <Input
+                id="scanCount"
+                inputMode="numeric"
+                autoFocus
+                value={scanDraft}
+                onChange={(event) => setScanDraft(event.target.value)}
+                placeholder="۰"
+              />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button className="flex-1" onClick={() => void saveScan(false)}>
+                {fa.actions.save}
+              </Button>
+              <Button variant="secondary" onClick={() => void saveScan(true)}>
+                {fa.stocktake.scanNext}
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : null}
+
+      <Scanner open={scanOpen} onClose={() => setScanOpen(false)} onResult={handleScan} />
     </div>
   );
 }

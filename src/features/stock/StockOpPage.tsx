@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Search } from 'lucide-react';
+import { ScanLine, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CartonInput } from '@/components/common/CartonInput';
@@ -15,12 +15,14 @@ import {
 } from '@/db/movements';
 import { listLocations, listProducts, updateProduct } from '@/db/repos';
 import type { MovementType } from '@/db/types';
+import { matchProductByBarcode } from '@/domain/barcode';
 import { parseIntegerInput } from '@/domain/numbers';
 import { buildSearchIndex, searchIndex } from '@/domain/search';
 import { displayProductName, formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
-import { toastError, toastUndo } from '@/lib/toast';
+import { toastError, toastSuccess, toastUndo } from '@/lib/toast';
 import { ProductThumb } from '@/features/products/ProductThumb';
+import { Scanner } from '@/features/scan/Scanner';
 import { suggestImportUndoRemainder } from '@/features/importexport/undoImport';
 
 type Op = 'receive' | 'issue' | 'damage' | 'transfer' | 'adjust';
@@ -70,6 +72,7 @@ export function StockOpPage() {
   const [currentQty, setCurrentQty] = useState<number | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const product = useMemo(
     () => (products ?? []).find((p) => p.id === productId),
@@ -127,6 +130,18 @@ export function StockOpPage() {
   // Stock coming in can unblock an import that a previous undo had to leave half
   // done; the shopkeeper gets the offer in the same breath as the movement.
   const offerRemainderUndo = () => void suggestImportUndoRemainder();
+
+  const handleScan = (code: string) => {
+    setScanOpen(false);
+    const found = matchProductByBarcode(products, code);
+    if (!found) {
+      toastError(`${fa.scan.notFound} ${code}`);
+      return;
+    }
+    setProductId(found.id);
+    setTerm('');
+    toastSuccess(displayProductName(found.name));
+  };
 
   const submit = async () => {
     if (!product) {
@@ -225,6 +240,10 @@ export function StockOpPage() {
               {product.code}
             </p>
           </div>
+          <Button variant="secondary" size="sm" onClick={() => setScanOpen(true)}>
+            <ScanLine className="size-4" />
+            {fa.scan.button}
+          </Button>
           {!presetProductId ? (
             <Button variant="ghost" size="sm" onClick={() => setProductId('')}>
               {fa.actions.clear}
@@ -233,15 +252,21 @@ export function StockOpPage() {
         </div>
       ) : (
         <div className="mb-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-5 text-crate" />
-            <Input
-              autoFocus
-              value={term}
-              onChange={(event) => setTerm(event.target.value)}
-              placeholder={fa.stock.pickProduct}
-              className="ps-10"
-            />
+          <div className="flex items-start gap-2">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute inset-y-0 start-3 my-auto size-5 text-crate" />
+              <Input
+                autoFocus
+                value={term}
+                onChange={(event) => setTerm(event.target.value)}
+                placeholder={fa.stock.pickProduct}
+                className="ps-10"
+              />
+            </div>
+            <Button variant="secondary" onClick={() => setScanOpen(true)}>
+              <ScanLine className="size-5" />
+              {fa.scan.button}
+            </Button>
           </div>
           {term.trim() && results.length === 0 ? (
             <p className="mt-2 text-crate">{fa.empty.search}</p>
@@ -341,6 +366,8 @@ export function StockOpPage() {
       </div>
 
       {!product && !term.trim() ? <EmptyState message={fa.stock.pickProduct} /> : null}
+
+      <Scanner open={scanOpen} onClose={() => setScanOpen(false)} onResult={handleScan} />
     </div>
   );
 }

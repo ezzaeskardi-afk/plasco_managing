@@ -93,7 +93,9 @@ fun valuate(products: List<Product>, levels: List<StockLevel>): ValuationSummary
     }
 
     // مکان: هر سطح مثبت یک سهم است (کالای غیرفعال یا حذف‌شده حساب نمی‌شود).
-    val locationAcc = HashMap<ID, GroupValuation>()
+    // LinkedHashMap تا ترتیب اولین‌دیدنِ گروه‌ها حفظ شود؛ مرتب‌سازی پایدار است و
+    // گروه‌های کاملاً مساوی همان ترتیب Map نسخهٔ وب را می‌گیرند.
+    val locationAcc = linkedMapOf<ID, GroupValuation>()
     for (level in levels) {
         if (level.qty <= 0) continue
         val product = activeById[level.productId] ?: continue
@@ -107,14 +109,14 @@ fun valuate(products: List<Product>, levels: List<StockLevel>): ValuationSummary
     }
 
     // برند و دسته: هر کالای دارای موجودی یک سهم است.
-    val brandAcc = HashMap<ID, GroupValuation>()
-    val categoryAcc = HashMap<ID, GroupValuation>()
+    val brandAcc = linkedMapOf<ID, GroupValuation>()
+    val categoryAcc = linkedMapOf<ID, GroupValuation>()
     for (product in active) {
         val total = maxOf(0, totals[product.id] ?: 0)
         if (total <= 0) continue
         val costShare = total.toLong() * product.buyPrice
         val retailShare = total.toLong() * product.retailPrice
-        product.brandId?.let { brandId ->
+        product.brandId?.takeIf { it.isNotEmpty() }?.let { brandId ->
             val current = brandAcc[brandId] ?: GroupValuation(brandId)
             brandAcc[brandId] = current.copy(
                 pieces = current.pieces + total,
@@ -123,7 +125,7 @@ fun valuate(products: List<Product>, levels: List<StockLevel>): ValuationSummary
                 retail = current.retail + retailShare,
             )
         }
-        product.categoryId?.let { categoryId ->
+        product.categoryId?.takeIf { it.isNotEmpty() }?.let { categoryId ->
             val current = categoryAcc[categoryId] ?: GroupValuation(categoryId)
             categoryAcc[categoryId] = current.copy(
                 pieces = current.pieces + total,

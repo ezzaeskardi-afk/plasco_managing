@@ -73,6 +73,11 @@ class NumbersTest {
         assertEquals("۱۲٫۵ هزار", formatCompact(12500))
         assertEquals("۳ میلیون", formatCompact(3_000_000))
         assertEquals("۱٫۱ میلیارد", formatCompact(1_100_000_000))
+        // مثل نسخهٔ وب: گرد شدن به «۱۰۰۰ هزار» یک پله بالا می‌رود.
+        assertEquals("۱ میلیارد", formatCompact(999_999_999L))
+        assertEquals("۹۹۹٫۵ میلیون", formatCompact(999_500_000L))
+        // پول Long است و در Int جا نمی‌شود؛ نبودِ این آزمون یک باگ برش را نگه می‌داشت.
+        assertEquals("۳٬۰۰۰٬۰۰۰٬۰۰۰ تومان", formatMoney(3_000_000_000L))
     }
 
     @Test
@@ -227,6 +232,31 @@ class StockTest {
         val summary = valuate(products, levels)
         // ارزش فروش برابر → تعداد بیشتر اول.
         assertEquals(listOf("brand-b", "brand-a"), summary.byBrand.map { it.id })
+    }
+
+    @Test
+    fun `group ties keep the first seen order`() {
+        val products = listOf(
+            product("a", retail = 200).copy(brandId = "brand-a"),
+            product("b", retail = 200).copy(brandId = "brand-b"),
+        )
+        val levels = listOf(
+            StockLevel("a", "loc-shop", 2, null, 0),
+            StockLevel("b", "loc-shop", 2, null, 0),
+        )
+        // ارزش و تعداد کاملاً برابر → ترتیب دیدنِ اول (مثل Map نسخهٔ وب).
+        val summary = valuate(products, levels)
+        assertEquals(listOf("brand-a", "brand-b"), summary.byBrand.map { it.id })
+    }
+
+    @Test
+    fun `valuation skips blank brand and category ids`() {
+        val products = listOf(product("a").copy(brandId = "", categoryId = ""))
+        val levels = listOf(StockLevel("a", "loc-shop", 1, null, 0))
+        // نسخهٔ وب فقط id غیرخالی را گروه می‌کند.
+        val summary = valuate(products, levels)
+        assertEquals(0, summary.byBrand.size)
+        assertEquals(0, summary.byCategory.size)
     }
 
     @Test

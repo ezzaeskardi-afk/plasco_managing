@@ -28,11 +28,13 @@ fun formatNumber(value: Int): String = formatNumber(value.toLong())
 
 fun formatQty(value: Int): String = formatNumber(value)
 
-/** پول در واحد دلخواه کاربر (پیش‌فرض تومان). */
-fun formatMoney(value: Int, currencyLabel: String = "تومان"): String {
+/** پول در واحد دلخواه کاربر (پیش‌فرض تومان). پول Long است؛ نوع Int فقط راحتیِ فراخوانی است. */
+fun formatMoney(value: Long, currencyLabel: String = "تومان"): String {
     val text = formatNumber(value)
     return if (currencyLabel.isBlank()) text else "$text $currencyLabel"
 }
+
+fun formatMoney(value: Int, currencyLabel: String = "تومان"): String = formatMoney(value.toLong(), currencyLabel)
 
 private val COMPACT_UNITS: List<Pair<Long, String>> = listOf(
     1_000_000_000L to "میلیارد",
@@ -50,6 +52,14 @@ fun compactParts(value: Long): Pair<String, String> {
     for ((scale, label) in COMPACT_UNITS) {
         if (abs >= scale) {
             val rounded = Math.round(abs.toDouble() / scale * 10) / 10.0
+            // مثل نسخهٔ وب: ۹۹۹٫۹ هزار که به «۱۰۰۰ هزار» گِرد شود، یک پله بالاتر می‌رود.
+            if (rounded >= 1000 && scale < 1_000_000_000L) {
+                val next = COMPACT_UNITS.firstOrNull { it.first == scale * 1000 }
+                if (next != null) {
+                    val promoted = Math.round(abs.toDouble() / next.first * 10) / 10.0
+                    return sign + decimalText(promoted) to next.second
+                }
+            }
             return sign + decimalText(rounded) to label
         }
     }
@@ -70,9 +80,6 @@ private fun decimalText(value: Double): String {
     else rounded.toString().replace('.', DECIMAL_SEPARATOR)
     return toPersianDigits(text)
 }
-
-/** مقدار کامل با جداکننده — برای جزئیات و راهنمای لمس. */
-fun formatFull(value: Int): String = formatNumber(value)
 
 /** کد کالا: شمارهٔ صفر-پرشده با رقم لاتین (P-00001). */
 fun padStartOrPlain(value: Int, width: Int): String = value.toString().padStart(width, '0')

@@ -253,17 +253,17 @@ fun ScreenHeader(
     }
 }
 
-/** نام فارسی هر نوع حرکت. */
+/** نام فارسی هر نوع حرکت — مو‌به‌مو مثل `MOVEMENT_LABELS` نسخهٔ وب (`features/stock/labels.ts`). */
 fun movementLabel(type: MovementType): String = when (type) {
-    MovementType.Initial -> "موجودی اولیه"
+    MovementType.Initial -> "اول کار"
     MovementType.Receive -> "ورود"
-    MovementType.Sale -> "خروج"
-    MovementType.ReturnIn -> "برگشت از مشتری"
-    MovementType.ReturnOut -> "برگشت به فروشنده"
-    MovementType.Adjust -> "تعدیل"
+    MovementType.Sale -> "فروش"
+    MovementType.ReturnIn -> "برگشتی از مشتری"
+    MovementType.ReturnOut -> "برگشتی به شرکت"
+    MovementType.Adjust -> "اصلاح"
     MovementType.Count -> "شمارش"
-    MovementType.TransferOut -> "انتقال از"
-    MovementType.TransferIn -> "انتقال به"
+    MovementType.TransferOut -> "رفت به جای دیگر"
+    MovementType.TransferIn -> "آمد از جای دیگر"
     MovementType.Damage -> "خرابی"
 }
 
@@ -359,13 +359,14 @@ fun QuickActionTile(
     }
 }
 
-/** یک ردیف تفکیک (مکان/برند/دسته) مثل نسخهٔ وب: نام، تعداد، نوار سهم و ارزش فروش. */
+/** یک ردیف تفکیک (مکان/برند/دسته) مثل نسخهٔ وب: نام، تعداد، نوار سهم و ارزش فروش — ارزش فقط وقتی قفل قیمت خاموش است می‌آید ولی نوار سهم همیشه از ارزش واقعی است. */
 @Composable
 fun BreakdownRow(
     label: String,
     pieces: Int,
-    retail: Long?,
+    retail: Long,
     maxRetail: Long,
+    costVisible: Boolean,
     currencyLabel: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -401,7 +402,7 @@ fun BreakdownRow(
                     .clip(RoundedCornerShape(4.dp))
                     .background(MaterialTheme.colorScheme.outlineVariant),
             ) {
-                val fraction = (retail ?: 0L).toFloat() / maxOf(maxRetail, 1L).toFloat()
+                val fraction = retail.toFloat() / maxOf(maxRetail, 1L).toFloat()
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(fraction.coerceIn(0.04f, 1f))
@@ -410,10 +411,10 @@ fun BreakdownRow(
                         .background(MaterialTheme.colorScheme.primary),
                 )
             }
-            if (retail != null) {
+            if (costVisible) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    formatMoney(retail.toInt(), currencyLabel),
+                    formatMoney(retail, currencyLabel),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

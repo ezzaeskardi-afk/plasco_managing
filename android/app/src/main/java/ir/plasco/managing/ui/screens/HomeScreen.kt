@@ -168,7 +168,7 @@ fun HomeScreen(
                         if (settings.costLockEnabled) {
                             Fa.common.lockedValue
                         } else {
-                            formatMoney(valuation.potentialProfit.toInt(), settings.currencyLabel)
+                            formatMoney(valuation.potentialProfit, settings.currencyLabel)
                         },
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
@@ -338,8 +338,9 @@ private fun BreakdownList(
             BreakdownRow(
                 label = names[group.id] ?: Fa.common.unknown,
                 pieces = group.pieces,
-                retail = if (costVisible) group.retail else null,
+                retail = group.retail,
                 maxRetail = maxRetail,
+                costVisible = costVisible,
                 currencyLabel = currencyLabel,
                 onClick = { onPick(group.id) },
             )

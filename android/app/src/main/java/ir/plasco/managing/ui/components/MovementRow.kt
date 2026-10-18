@@ -11,7 +11,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
@@ -50,10 +54,11 @@ fun MovementRow(
     val container = LocalAppContainer.current
     val showMessage = LocalShowMessage.current
     val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
 
     val meta = buildList {
         add(formatJalali(movement.at) + " · " + formatTime(movement.at))
-        locationName?.let(::add)
+        locationName?.takeIf { it.isNotBlank() }?.let(::add)
         movement.note?.takeIf { it.isNotBlank() }?.let(::add)
         if (movement.undoOf != null || alreadyUndone) add(Fa.movements.undoneMark)
     }.joinToString(" · ")
@@ -100,13 +105,17 @@ fun MovementRow(
         )
         if (showUndo && movement.undoOf == null && !alreadyUndone) {
             TextButton(
+                enabled = !busy,
                 onClick = {
+                    busy = true
                     scope.launch {
                         try {
                             container.stock.undo(movement.id)
                             showMessage(Fa.movements.undone)
                         } catch (error: Throwable) {
                             showMessage(messageFor(error))
+                        } finally {
+                            busy = false
                         }
                     }
                 },

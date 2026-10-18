@@ -113,7 +113,7 @@ export function LabelsPage() {
             onChange={(event) => setName(event.target.value)}
           />
           <div className="mt-4 flex gap-2">
-            <Button block disabled={busy || !name.trim()} onClick={() => void save()}>
+            <Button className="flex-1" disabled={busy || !name.trim()} onClick={() => void save()}>
               {fa.actions.save}
             </Button>
             <Button variant="secondary" onClick={() => setOpen(null)}>

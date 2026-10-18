@@ -17,7 +17,7 @@ import { listLocations, listProducts, updateProduct } from '@/db/repos';
 import type { MovementType } from '@/db/types';
 import { parseIntegerInput } from '@/domain/numbers';
 import { buildSearchIndex, searchIndex } from '@/domain/search';
-import { formatQty } from '@/domain/format';
+import { displayProductName, formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
 import { toastError, toastUndo } from '@/lib/toast';
 import { ProductThumb } from '@/features/products/ProductThumb';
@@ -220,7 +220,7 @@ export function StockOpPage() {
         <div className="mb-4 flex items-center gap-3 rounded-input border border-line bg-paper p-3">
           <ProductThumb productId={product.id} />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-ink">{product.name}</p>
+            <p className="truncate text-ink">{displayProductName(product.name)}</p>
             <p dir="ltr" className="text-start text-[0.8rem] text-crate">
               {product.code}
             </p>
@@ -259,7 +259,9 @@ export function StockOpPage() {
                     className="flex min-h-16 w-full items-center gap-3 border-b border-line px-3 text-start last:border-b-0"
                   >
                     <ProductThumb productId={item.id} />
-                    <span className="min-w-0 flex-1 truncate text-ink">{item.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-ink">
+                      {displayProductName(item.name)}
+                    </span>
                     <span dir="ltr" className="text-[0.8rem] text-crate">
                       {item.code}
                     </span>
@@ -330,7 +332,7 @@ export function StockOpPage() {
       </div>
 
       <div className="flex gap-2">
-        <Button block disabled={busy || !product} onClick={() => void submit()}>
+        <Button className="flex-1" disabled={busy || !product} onClick={() => void submit()}>
           {OP_TITLES[op] ?? fa.stock.receive}
         </Button>
         <Button variant="secondary" onClick={() => navigate(-1)}>

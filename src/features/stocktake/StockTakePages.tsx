@@ -11,7 +11,7 @@ import { applyStockTake, revertStockTake } from '@/db/stocktake';
 import { listLocations, listProducts, listStockLevels } from '@/db/repos';
 import { db } from '@/db/dexie';
 import type { ID, StockTake, StockTakeItem } from '@/db/types';
-import { formatJalali, formatQty } from '@/domain/format';
+import { displayProductName, formatJalali, formatQty } from '@/domain/format';
 import { parseIntegerInput } from '@/domain/numbers';
 import { buildSearchIndex, searchIndex } from '@/domain/search';
 import { fa } from '@/i18n/fa';
@@ -114,7 +114,7 @@ export function StockTakeNewPage() {
         />
       </div>
       <div className="flex gap-2">
-        <Button block disabled={busy || !locationId} onClick={() => void start()}>
+        <Button className="flex-1" disabled={busy || !locationId} onClick={() => void start()}>
           {fa.stocktake.start}
         </Button>
         <Button variant="secondary" onClick={() => navigate('/stocktake')}>
@@ -282,7 +282,7 @@ export function StockTakeCountPage() {
             >
               <div className="flex min-h-16 items-center gap-3 px-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-ink">{product.name}</p>
+                  <p className="truncate text-ink">{displayProductName(product.name)}</p>
                   <p className="text-[0.8rem] text-crate">
                     {fa.common.system}: <span className="tnum">{formatQty(system)}</span>
                     {counted ? (
@@ -496,7 +496,9 @@ export function StockTakeReviewPage() {
           {differences.map((row) => (
             <li key={row.item.id} className="flex items-center gap-3 p-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-ink">{row.product?.name}</p>
+                <p className="truncate text-ink">
+                  {row.product ? displayProductName(row.product.name) : null}
+                </p>
                 <p className="text-[0.8rem] text-crate">
                   {fa.common.system}: {formatQty(row.current)} → {fa.stocktake.counted}: {formatQty(row.item.counted)}
                 </p>
@@ -539,7 +541,7 @@ export function StockTakeReviewPage() {
       ) : null}
 
       <div className="flex gap-2">
-        <Button block disabled={busy} onClick={() => void apply()}>
+        <Button className="flex-1" disabled={busy} onClick={() => void apply()}>
           {fa.stocktake.apply}
         </Button>
         <Button variant="secondary" onClick={() => navigate(`/stocktake/${session.id}`)}>

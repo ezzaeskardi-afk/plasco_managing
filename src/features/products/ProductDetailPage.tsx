@@ -28,7 +28,7 @@ import {
 import { listMovements } from '@/db/repos';
 import { listPriceChanges } from '@/db/priceHistory';
 import type { Product, PriceChange } from '@/db/types';
-import { formatJalali, formatMoney, formatQty } from '@/domain/format';
+import { displayProductName, formatJalali, formatMoney, formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
 import { toastUndo } from '@/lib/toast';
 import { useSettings } from '@/app/settings-context';
@@ -76,7 +76,7 @@ export function ProductDetailPage() {
       <div className="mb-4 flex items-start gap-4 rounded-input border border-line bg-paper p-4">
         <ProductThumb productId={product.id} kind="full" className="size-24 rounded-thumb" />
         <div className="min-w-0 flex-1">
-          <h2 className="text-title font-bold text-ink">{product.name}</h2>
+          <h2 className="text-title font-bold text-ink">{displayProductName(product.name)}</h2>
           {product.variant ? <p className="text-crate">{product.variant}</p> : null}
           <p className="mt-1 flex flex-wrap items-center gap-2 text-[0.9rem] text-crate">
             {brand ? <span>{brand.name}</span> : null}

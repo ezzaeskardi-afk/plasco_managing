@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Banknote, Filter, Plus, Search, X } from 'lucide-react';
+import { Banknote, Filter, PackageOpen, Plus, Search, SearchX, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StockStack } from '@/components/common/StockStack';
@@ -9,7 +9,7 @@ import { EmptyState, Select } from '@/components/ui/misc';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { listBrands, listCategories, listLocations, listProducts, listStockLevels } from '@/db/repos';
 import type { Product } from '@/db/types';
-import { formatQty } from '@/domain/format';
+import { displayProductName, formatQty } from '@/domain/format';
 import { buildSearchIndex, searchIndex } from '@/domain/search';
 import { productTotals, stockState } from '@/domain/valuation';
 import { fa } from '@/i18n/fa';
@@ -192,6 +192,7 @@ export function ProductsPage() {
 
       {rows.length === 0 ? (
         <EmptyState
+          icon={debounced ? <SearchX className="size-7" /> : <PackageOpen className="size-7" />}
           message={debounced ? fa.empty.search : fa.empty.products}
           action={<Button onClick={() => navigate('/products/new')}>{fa.products.new}</Button>}
         />
@@ -346,7 +347,7 @@ function ProductRow({
         <ProductThumb productId={product.id} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-ink">
-            {product.name}
+            {displayProductName(product.name)}
             {product.variant ? <span className="text-crate"> · {product.variant}</span> : null}
           </p>
           <p className="flex items-center gap-2 text-[0.9rem] text-crate">
@@ -365,7 +366,7 @@ function ProductRow({
       <button
         type="button"
         onClick={onPrice}
-        aria-label={`${fa.products.priceEdit} — ${product.name}`}
+        aria-label={`${fa.products.priceEdit} — ${displayProductName(product.name)}`}
         className="flex size-11 shrink-0 items-center justify-center rounded-input text-basin"
       >
         <Banknote className="size-5" />

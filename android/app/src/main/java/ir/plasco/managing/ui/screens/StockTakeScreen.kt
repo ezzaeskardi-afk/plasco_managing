@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import ir.plasco.managing.domain.findProductByBarcode
 import ir.plasco.managing.domain.formatJalali
+import ir.plasco.managing.domain.displayProductName
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.parseIntegerInput
 import ir.plasco.managing.model.ID
@@ -158,7 +159,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(product.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                    Text(displayProductName(product.name), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
                     Text(
                         "${product.code} · ${Fa.movements.pieces}: ${formatNumber(systemQty)}",
                         style = MaterialTheme.typography.labelMedium,
@@ -246,7 +247,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
     if (target != null) {
         AlertDialog(
             onDismissRequest = { scanTarget = null },
-            title = { Text(target.name) },
+            title = { Text(displayProductName(target.name)) },
             text = {
                 Column {
                     Text(

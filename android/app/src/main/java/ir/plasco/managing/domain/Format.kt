@@ -1,11 +1,16 @@
 package ir.plasco.managing.domain
 
+import ir.plasco.managing.ui.Fa
+
 /**
  * نمایش اعداد — ذخیره‌سازی همیشه عدد صحیح خام است (AGENTS.md بخش ۶).
  * جداکنندهٔ هزارگان فارسی «٬» و رقم‌ها فارسی‌اند.
  */
 private const val THOUSANDS_SEPARATOR = '\u066C' // ٬
 private const val DECIMAL_SEPARATOR = '\u066B' // ٫
+
+/** نام خالی مجاز است (AGENTS.md بخش ۲۵)؛ فهرست‌ها جای خالی را «بدون نام» نشان می‌دهند. */
+fun displayProductName(name: String): String = name.trim().ifEmpty { Fa.products.unnamed }
 
 fun formatNumber(value: Long): String {
     val negative = value < 0

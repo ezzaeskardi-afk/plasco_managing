@@ -162,14 +162,21 @@ export function Segmented<T extends string>({
 }
 
 export function EmptyState({
+  icon,
   message,
   action,
 }: {
+  icon?: ReactNode;
   message: string;
   action?: ReactNode;
 }) {
   return (
     <div className="flex flex-col items-center gap-4 px-6 py-16 text-center">
+      {icon ? (
+        <div className="flex size-14 items-center justify-center rounded-full bg-frost text-crate">
+          {icon}
+        </div>
+      ) : null}
       <p className="max-w-[26rem] text-crate">{message}</p>
       {action}
     </div>

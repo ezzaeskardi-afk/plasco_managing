@@ -74,6 +74,14 @@ class NumbersTest {
         assertEquals("۳ میلیون", formatCompact(3_000_000))
         assertEquals("۱٫۱ میلیارد", formatCompact(1_100_000_000))
     }
+
+    @Test
+    fun `empty product names show the placeholder`() {
+        // نام خالی مجاز است (AGENTS.md بخش ۲۵)؛ فهرست‌ها جای خالی را «بدون نام» نشان می‌دهند.
+        assertEquals("بدون نام", displayProductName(""))
+        assertEquals("بدون نام", displayProductName("   "))
+        assertEquals("ظرف", displayProductName("ظرف"))
+    }
 }
 
 class UnitsTest {

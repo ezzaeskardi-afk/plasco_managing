@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ChevronDown, ImagePlus, Trash2 } from 'lucide-react';
+import { ImagePlus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
+import { Section } from '@/components/common/Kpi';
 import { NumberField } from '@/components/common/NumberField';
 import { QuantityInput } from '@/components/common/QuantityInput';
 import { Button } from '@/components/ui/button';
@@ -28,24 +29,24 @@ import { parseIntegerInput } from '@/domain/numbers';
 import { fa } from '@/i18n/fa';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { useSettings } from '@/app/settings-context';
-import { fileToPhoto } from './photo';
-import { usePhotoUrl } from './photo';
+import { fileToPhoto, usePhotoUrl } from './photo';
 
+// No field blocks saving (AGENTS.md section 25): an empty name is stored empty
+// and shown as «بدون نام», a missing pack size falls back to 1, and only a
+// value that is not a number at all is refused so a typo cannot be saved.
 const money = (message: string) =>
   z
     .string()
     .refine((v) => v.trim() === '' || (parseIntegerInput(v) ?? -1) >= 0, { message });
 
 const schema = z.object({
-  name: z.string().trim().min(1, 'نام کالا الزامی است.'),
+  name: z.string(),
   brandId: z.string(),
   categoryId: z.string(),
   code: z.string(),
   barcodes: z.string(),
   packLabel: z.string(),
-  packSize: z.string().refine((v) => (parseIntegerInput(v) ?? 0) >= 1, {
-    message: 'تعداد در بسته باید حداقل ۱ باشد.',
-  }),
+  packSize: z.string(),
   buyPrice: money('قیمت خرید را درست وارد کنید.'),
   retailPrice: money('قیمت خرده را درست وارد کنید.'),
   wholesalePrice: money('قیمت عمده را درست وارد کنید.'),
@@ -78,13 +79,13 @@ function toDraft(values: FormValues) {
     return parsed == null ? undefined : parsed;
   };
   return {
-    name: values.name,
+    name: values.name.trim(),
     brandId: values.brandId || undefined,
     categoryId: values.categoryId || undefined,
     code: values.code || undefined,
     barcodes: values.barcodes.split('\n').map((b) => b.trim()).filter(Boolean),
     packLabel: values.packLabel || DEFAULT_PACK_LABEL,
-    packSize: int(values.packSize) ?? 1,
+    packSize: Math.max(1, int(values.packSize) ?? 1),
     buyPrice: int(values.buyPrice) ?? 0,
     retailPrice: int(values.retailPrice) ?? 0,
     wholesalePrice: int(values.wholesalePrice),
@@ -125,7 +126,6 @@ export function ProductFormPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [showMore, setShowMore] = useState(false);
   const [openingPieces, setOpeningPieces] = useState(0);
   const [openingLocationId, setOpeningLocationId] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -144,7 +144,7 @@ export function ProductFormPage() {
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: EMPTY });
 
-  const packSize = parseIntegerInput(watch('packSize')) ?? 1;
+  const packSize = Math.max(1, parseIntegerInput(watch('packSize')) ?? 1);
   const packLabel = watch('packLabel') || DEFAULT_PACK_LABEL;
   const existingPhotoUrl = usePhotoUrl(isEdit ? id : undefined, 'thumb');
   const previewUrl = useMemo(
@@ -236,223 +236,216 @@ export function ProductFormPage() {
       className="mx-auto max-w-[720px] pb-10"
       onSubmit={handleSubmit((values) => void submit(values, false))}
     >
-      <Field label={fa.products.name} htmlFor="name" hint={fa.products.nameHint}>
-        <Input id="name" autoFocus placeholder={fa.products.namePlaceholder} {...register('name')} />
-        {errors.name ? <p className="mt-1 text-[0.8rem] text-out">{errors.name.message}</p> : null}
-      </Field>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* Editing an existing row would reveal its stored cost, so the field
-            stays hidden while the lock is on; the form state still submits the
-            untouched value. Creating starts blank, so the field stays. */}
-        {!isEdit || costVisible ? (
-          <NumberField
-            id="buyPrice"
-            label={fa.products.buyPrice}
-            value={watch('buyPrice')}
-            onChange={(value) => setValue('buyPrice', value)}
-            error={errors.buyPrice?.message}
-            group
-            suffix={moneySuffix}
-          />
-        ) : null}
-        <NumberField
-          id="retailPrice"
-          label={fa.products.retailPrice}
-          value={watch('retailPrice')}
-          onChange={(value) => setValue('retailPrice', value)}
-          error={errors.retailPrice?.message}
-          group
-          suffix={moneySuffix}
-        />
-      </div>
-
-      {!isEdit ? (
-        <div className="mb-6 rounded-input border border-line bg-paper p-4">
-          <Label>{fa.products.openingQty}</Label>
-          <QuantityInput
-            value={openingPieces}
-            onChange={setOpeningPieces}
-            packSize={packSize}
-            packLabel={packLabel}
-          />
-          <div className="mt-3">
-            <Label htmlFor="openingLocation">{fa.products.openingLocation}</Label>
-            <Select
-              id="openingLocation"
-              value={openingLocationId}
-              onValueChange={setOpeningLocationId}
-              options={locations.map((l) => ({ value: l.id, label: l.name }))}
-              placeholder={fa.stock.location}
+      {/* Every field is visible and none is required (AGENTS.md section 25):
+          the old «بیشتر» accordion hid half the form, so the whole list now
+          flows in one scroll, grouped by section titles. */}
+      <Section title={fa.products.sectionInfo}>
+        <Field label={fa.products.name} htmlFor="name" hint={fa.products.nameHint}>
+          <Input id="name" autoFocus placeholder={fa.products.namePlaceholder} {...register('name')} />
+        </Field>
+        <Field label={fa.common.code} htmlFor="code" hint="خالی بگذارید تا خودکار ساخته شود.">
+          <Input id="code" dir="ltr" className="text-start" {...register('code')} />
+          {errors.code ? <p className="mt-1 text-[0.8rem] text-out">{errors.code.message}</p> : null}
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={fa.products.filterBrand} htmlFor="brandId">
+            <Controller
+              control={control}
+              name="brandId"
+              render={({ field }) => (
+                <Select
+                  id="brandId"
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  allowEmpty
+                  placeholder={fa.products.filterBrand}
+                  options={brands.map((b) => ({ value: b.id, label: b.name }))}
+                />
+              )}
             />
-          </div>
-          <p className="mt-2 text-[0.8rem] text-crate">{fa.products.packPiecesHint}</p>
+          </Field>
+          <Field label={fa.products.filterCategory} htmlFor="categoryId">
+            <Controller
+              control={control}
+              name="categoryId"
+              render={({ field }) => (
+                <Select
+                  id="categoryId"
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  allowEmpty
+                  placeholder={fa.products.filterCategory}
+                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                />
+              )}
+            />
+          </Field>
         </div>
-      ) : null}
+      </Section>
 
-      <button
-        type="button"
-        onClick={() => setShowMore((prev) => !prev)}
-        className="mb-4 flex h-11 w-full items-center justify-between rounded-input border border-line bg-paper px-3 text-ink"
-      >
-        <span>{fa.actions.more}</span>
-        <ChevronDown className={showMore ? 'size-5 rotate-180' : 'size-5'} />
-      </button>
-
-      {showMore ? (
-        <div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={fa.products.filterBrand} htmlFor="brandId">
-              <Controller
-                control={control}
-                name="brandId"
-                render={({ field }) => (
-                  <Select
-                    id="brandId"
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    allowEmpty
-                    placeholder={fa.products.filterBrand}
-                    options={brands.map((b) => ({ value: b.id, label: b.name }))}
-                  />
-                )}
-              />
-            </Field>
-            <Field label={fa.products.filterCategory} htmlFor="categoryId">
-              <Controller
-                control={control}
-                name="categoryId"
-                render={({ field }) => (
-                  <Select
-                    id="categoryId"
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    allowEmpty
-                    placeholder={fa.products.filterCategory}
-                    options={categories.map((c) => ({ value: c.id, label: c.name }))}
-                  />
-                )}
-              />
-            </Field>
-            <Field label={fa.common.code} htmlFor="code" hint="خالی بگذارید تا خودکار ساخته شود.">
-              <Input id="code" dir="ltr" className="text-start" {...register('code')} />
-              {errors.code ? (
-                <p className="mt-1 text-[0.8rem] text-out">{errors.code.message}</p>
-              ) : null}
-            </Field>
+      <Section title={fa.products.sectionPrices}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {/* Editing an existing row would reveal its stored cost, so the field
+              stays hidden while the lock is on; the form state still submits the
+              untouched value. Creating starts blank, so the field stays. */}
+          {!isEdit || costVisible ? (
             <NumberField
-              id="wholesalePrice"
-              label={fa.products.wholesalePrice}
-              value={watch('wholesalePrice')}
-              onChange={(value) => setValue('wholesalePrice', value)}
-              error={errors.wholesalePrice?.message}
-              hint={fa.common.optional}
+              id="buyPrice"
+              label={fa.products.buyPrice}
+              value={watch('buyPrice')}
+              onChange={(value) => setValue('buyPrice', value)}
+              error={errors.buyPrice?.message}
               group
               suffix={moneySuffix}
             />
-            <NumberField
-              id="minStock"
-              label={fa.products.minStock}
-              value={watch('minStock')}
-              onChange={(value) => setValue('minStock', value)}
-              error={errors.minStock?.message}
-              hint={fa.common.optional}
-            />
-            <NumberField
-              id="packSize"
-              label={fa.products.packSize}
-              value={watch('packSize')}
-              onChange={(value) => setValue('packSize', value)}
-              error={errors.packSize?.message}
-              hint={fa.products.packPiecesHint}
-            />
-          </div>
+          ) : null}
+          <NumberField
+            id="retailPrice"
+            label={fa.products.retailPrice}
+            value={watch('retailPrice')}
+            onChange={(value) => setValue('retailPrice', value)}
+            error={errors.retailPrice?.message}
+            group
+            suffix={moneySuffix}
+          />
+          <NumberField
+            id="wholesalePrice"
+            label={fa.products.wholesalePrice}
+            value={watch('wholesalePrice')}
+            onChange={(value) => setValue('wholesalePrice', value)}
+            error={errors.wholesalePrice?.message}
+            hint={fa.common.optional}
+            group
+            suffix={moneySuffix}
+          />
+        </div>
+      </Section>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={fa.products.packLabel} htmlFor="packLabel">
-              <Input id="packLabel" {...register('packLabel')} />
-            </Field>
-            <Field label={fa.products.barcodes} htmlFor="barcodes">
-              <Textarea
-                id="barcodes"
-                dir="ltr"
-                className="text-start"
-                placeholder={fa.products.barcodePlaceholder}
-                {...register('barcodes')}
+      <Section title={fa.products.sectionPack}>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <NumberField
+            id="packSize"
+            label={fa.products.packSize}
+            value={watch('packSize')}
+            onChange={(value) => setValue('packSize', value)}
+            hint={fa.products.packPiecesHint}
+          />
+          <Field label={fa.products.packLabel} htmlFor="packLabel">
+            <Input id="packLabel" {...register('packLabel')} />
+          </Field>
+          <NumberField
+            id="minStock"
+            label={fa.products.minStock}
+            value={watch('minStock')}
+            onChange={(value) => setValue('minStock', value)}
+            error={errors.minStock?.message}
+            hint={fa.common.optional}
+          />
+        </div>
+        {!isEdit ? (
+          <div className="rounded-input border border-line bg-paper p-4">
+            <Label>{fa.products.openingQty}</Label>
+            <QuantityInput
+              value={openingPieces}
+              onChange={setOpeningPieces}
+              packSize={packSize}
+              packLabel={packLabel}
+            />
+            <div className="mt-3">
+              <Label htmlFor="openingLocation">{fa.products.openingLocation}</Label>
+              <Select
+                id="openingLocation"
+                value={openingLocationId}
+                onValueChange={setOpeningLocationId}
+                options={locations.map((l) => ({ value: l.id, label: l.name }))}
+                placeholder={fa.stock.location}
               />
-            </Field>
+            </div>
           </div>
+        ) : null}
+      </Section>
 
+      <Section title={fa.products.sectionMedia}>
+        <div className="mb-4 rounded-input border border-line bg-paper p-4">
+          <Label>{fa.common.photo}</Label>
+          <div className="mt-2 flex items-center gap-3">
+            {photoSrc ? (
+              <img src={photoSrc} alt="" className="size-20 rounded-thumb object-cover" />
+            ) : (
+              <div className="flex size-20 items-center justify-center rounded-thumb bg-frost text-crate">
+                <ImagePlus className="size-6" />
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+              >
+                {fa.products.photoAdd}
+              </Button>
+              {photoSrc ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setPhotoFile(null);
+                    setPhotoCleared(true);
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                  {fa.products.photoRemove}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                setPhotoFile(file);
+                setPhotoCleared(false);
+              }
+            }}
+          />
+          <p className="mt-2 text-[0.8rem] text-crate">{fa.products.photoHint}</p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={fa.products.barcodes} htmlFor="barcodes">
+            <Textarea
+              id="barcodes"
+              dir="ltr"
+              className="text-start"
+              placeholder={fa.products.barcodePlaceholder}
+              {...register('barcodes')}
+            />
+          </Field>
           <Field label={fa.common.note} htmlFor="note">
             <Textarea id="note" {...register('note')} />
           </Field>
-
-          <div className="mb-4 flex items-center gap-3">
-            <input
-              id="active"
-              type="checkbox"
-              className="size-5"
-              checked={watch('active')}
-              onChange={(event) => setValue('active', event.target.checked)}
-            />
-            <Label htmlFor="active" className="mb-0">
-              {fa.products.active}
-            </Label>
-          </div>
-
-          <div className="mb-6 rounded-input border border-line bg-paper p-4">
-            <Label>{fa.common.photo}</Label>
-            <div className="mt-2 flex items-center gap-3">
-              {photoSrc ? (
-                <img src={photoSrc} alt="" className="size-20 rounded-thumb object-cover" />
-              ) : (
-                <div className="flex size-20 items-center justify-center rounded-thumb bg-frost text-crate">
-                  <ImagePlus className="size-6" />
-                </div>
-              )}
-              <div className="flex flex-col gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  {fa.products.photoAdd}
-                </Button>
-                {photoSrc ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPhotoFile(null);
-                      setPhotoCleared(true);
-                    }}
-                  >
-                    <Trash2 className="size-4" />
-                    {fa.products.photoRemove}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  setPhotoFile(file);
-                  setPhotoCleared(false);
-                }
-              }}
-            />
-            <p className="mt-2 text-[0.8rem] text-crate">{fa.products.photoHint}</p>
-          </div>
         </div>
-      ) : null}
+
+        <div className="mb-4 flex items-center gap-3">
+          <input
+            id="active"
+            type="checkbox"
+            className="size-5"
+            checked={watch('active')}
+            onChange={(event) => setValue('active', event.target.checked)}
+          />
+          <Label htmlFor="active" className="mb-0">
+            {fa.products.active}
+          </Label>
+        </div>
+      </Section>
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={saving}>

@@ -70,7 +70,7 @@ export function QuantityInput({
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <p className="text-crate">
           {fa.stock.liveTotal}:{' '}
           <span className="tnum font-extrabold text-ink">{formatQty(value)}</span>{' '}

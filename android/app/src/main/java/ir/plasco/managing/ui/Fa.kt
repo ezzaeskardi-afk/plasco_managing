@@ -45,12 +45,20 @@ object Fa {
         const val outEmpty = "هیچ کالایی تمام نشده."
         const val backupReminder = "بیش از ۷ روز است که بکاپ نگرفته‌ای."
         const val byLocation = "موجودی هر مکان"
+        const val recentTitle = "حرکات اخیر"
+        const val recentEmpty = "هنوز ورود و خروجی ثبت نشده."
     }
 
     object products {
         const val title = "کالاها"
         const val newProduct = "کالای جدید"
         const val name = "نام کالا"
+        const val nameHint = "خالی هم بماند، بعداً می‌شود نوشت."
+        const val unnamed = "بدون نام"
+        const val sectionInfo = "اطلاعات کالا"
+        const val sectionPrices = "قیمت‌ها"
+        const val sectionPack = "بسته‌بندی و موجودی"
+        const val sectionMedia = "عکس، بارکد و یادداشت"
         const val code = "کد کالا"
         const val codeHint = "خالی بگذاری، خودش شماره می‌دهد"
         const val brand = "برند"

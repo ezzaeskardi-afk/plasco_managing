@@ -1,3 +1,4 @@
+import { fa } from '@/i18n/fa';
 import { toPersianDigits } from './normalizeFa';
 
 // Display only - storage is always a raw integer (AGENTS.md section 6).
@@ -17,6 +18,11 @@ export function formatMoney(value: number, currencyLabel = 'تومان'): string
 
 export function formatQty(value: number): string {
   return formatNumber(value);
+}
+
+/** The name field is optional (AGENTS.md section 25); lists show a placeholder. */
+export function displayProductName(name: string): string {
+  return name.trim() || fa.products.unnamed;
 }
 
 export interface CompactParts {

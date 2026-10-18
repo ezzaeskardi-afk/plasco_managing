@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.plasco.managing.data.MovementInput
 import ir.plasco.managing.domain.cartonPieces
 import ir.plasco.managing.domain.findProductByBarcode
+import ir.plasco.managing.domain.displayProductName
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.parseIntegerInput
 import ir.plasco.managing.domain.ProductSearchIndex
@@ -218,7 +219,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                 Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(selected.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(displayProductName(selected.name), style = MaterialTheme.typography.bodyLarge)
                             Text(
                                 "${selected.code} · ${Fa.movements.pieces}: ${formatNumber(totals[selected.id] ?: 0)}",
                                 style = MaterialTheme.typography.labelMedium,
@@ -315,7 +316,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                 } else {
                     productId = found.id
                     query = ""
-                    showMessage(found.name)
+                    showMessage(displayProductName(found.name))
                 }
             },
             onDismiss = { scanOpen = false },

@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.plasco.managing.data.NewProduct
 import ir.plasco.managing.domain.findProductByBarcode
+import ir.plasco.managing.domain.displayProductName
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.normalizeBarcode
 import ir.plasco.managing.domain.parseBarcodeList
@@ -85,10 +86,8 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
 
     fun save() {
-        if (name.isBlank()) {
-            showMessage(Fa.errors.saveFailed)
-            return
-        }
+        // هیچ فیلدی اجباری نیست (AGENTS.md بخش ۲۵): نام خالی هم ذخیره میشود و
+        // فهرستها «بدون نام» نشان میدهند؛ فقط عیب واقعی جلوی ذخیره را میگیرد.
         val size = parseIntegerInput(packSize) ?: 1
         val initial = piecesFrom(parseIntegerInput(packsIn) ?: 0, parseIntegerInput(piecesIn) ?: 0, size)
         busy = true
@@ -164,14 +163,22 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
             )
         }
 
+        // فرم یک تکه است و آکاردئونی ندارد: هر گروه تیتر خودش را دارد و کل
+        // فهرست در یک اسکرول میآید؛ نام خالی مجاز است (AGENTS.md بخش ۲۵).
+        item { SectionTitle(Fa.products.sectionInfo, Modifier.padding(horizontal = 12.dp)) }
         item {
             Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
-                TextField(Fa.products.name, name, { name = it })
+                TextField(Fa.products.name, name, { name = it }, supporting = Fa.products.nameHint)
                 Spacer(Modifier.height(8.dp))
                 TextField(Fa.products.code, code, { code = it }, supporting = Fa.products.codeHint)
-                Spacer(Modifier.height(8.dp))
-                // قفل قیمت (مثل نسخهٔ وب): فقط در ویرایشِ کالای موجود پنهان می‌شود؛
-                // مقدار قبلی در همان state می‌ماند و بی‌تغییر دوباره فرستاده می‌شود.
+            }
+        }
+
+        item { SectionTitle(Fa.products.sectionPrices, Modifier.padding(horizontal = 12.dp)) }
+        item {
+            Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
+                // قفل قیمت (مثل نسخهٔ وب): فقط در ویرایشِ کالای موجود پنهان میشود؛
+                // مقدار قبلی در همان state میماند و بی‌تغییر دوباره فرستاده میشود.
                 // «کالای جدید» از خالی شروع می‌شود، پس فیلدش می‌ماند.
                 if (existing == null || !settings.costLockEnabled) {
                     NumberField(
@@ -190,34 +197,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                     groupThousands = true,
                     suffix = currency,
                 )
-            }
-        }
-
-        item { SectionTitle(Fa.photos.title, Modifier.padding(horizontal = 12.dp)) }
-
-        item {
-            Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
-                PhotoSection(
-                    productId = existing?.id,
-                    pending = photoPending,
-                    onPending = { bytes ->
-                        photoPending = bytes
-                        if (bytes != null) photoCleared = false
-                    },
-                    cleared = photoCleared,
-                    onCleared = {
-                        photoPending = null
-                        photoCleared = true
-                    },
-                    onMessage = showMessage,
-                )
-            }
-        }
-
-        item { SectionTitle(Fa.common.more, Modifier.padding(horizontal = 12.dp)) }
-
-        item {
-            Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
+                Spacer(Modifier.height(8.dp))
                 NumberField(
                     Fa.products.wholesalePrice,
                     wholesale,
@@ -225,26 +205,6 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                     groupThousands = true,
                     suffix = currency,
                 )
-                Spacer(Modifier.height(8.dp))
-                TextField(Fa.products.packLabel, packLabel, { packLabel = it })
-                Spacer(Modifier.height(8.dp))
-                NumberField(Fa.products.packSize, packSize, { packSize = it })
-                Spacer(Modifier.height(8.dp))
-                NumberField(Fa.products.minStock, minStock, { minStock = it }, supporting = Fa.products.minStockHint)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = barcodes,
-                    onValueChange = { barcodes = it },
-                    label = { Text(Fa.scan.codes) },
-                    supportingText = { Text(Fa.scan.codesHint) },
-                    minLines = 2,
-                    textStyle = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { scanOpen = true }) { Text(Fa.scan.addWithCamera) }
-                Spacer(Modifier.height(8.dp))
-                TextField(Fa.products.note, note, { note = it })
             }
         }
 
@@ -272,6 +232,17 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
             }
         }
 
+        item { SectionTitle(Fa.products.sectionPack, Modifier.padding(horizontal = 12.dp)) }
+        item {
+            Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
+                TextField(Fa.products.packLabel, packLabel, { packLabel = it })
+                Spacer(Modifier.height(8.dp))
+                NumberField(Fa.products.packSize, packSize, { packSize = it })
+                Spacer(Modifier.height(8.dp))
+                NumberField(Fa.products.minStock, minStock, { minStock = it }, supporting = Fa.products.minStockHint)
+            }
+        }
+
         if (existing == null) {
             item { SectionTitle(Fa.products.initialQty, Modifier.padding(horizontal = 12.dp)) }
             item {
@@ -289,6 +260,40 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                         )
                     }
                 }
+            }
+        }
+
+        item { SectionTitle(Fa.products.sectionMedia, Modifier.padding(horizontal = 12.dp)) }
+        item {
+            Panel(modifier = Modifier.padding(horizontal = 12.dp)) {
+                PhotoSection(
+                    productId = existing?.id,
+                    pending = photoPending,
+                    onPending = { bytes ->
+                        photoPending = bytes
+                        if (bytes != null) photoCleared = false
+                    },
+                    cleared = photoCleared,
+                    onCleared = {
+                        photoPending = null
+                        photoCleared = true
+                    },
+                    onMessage = showMessage,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = barcodes,
+                    onValueChange = { barcodes = it },
+                    label = { Text(Fa.scan.codes) },
+                    supportingText = { Text(Fa.scan.codesHint) },
+                    minLines = 2,
+                    textStyle = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { scanOpen = true }) { Text(Fa.scan.addWithCamera) }
+                Spacer(Modifier.height(8.dp))
+                TextField(Fa.products.note, note, { note = it })
             }
         }
 
@@ -335,7 +340,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
                 }
                 when {
                     code.isEmpty() -> showMessage(Fa.scan.notFound)
-                    owner != null -> showMessage(Fa.scan.otherProduct.replace("{name}", owner.name))
+                    owner != null -> showMessage(Fa.scan.otherProduct.replace("{name}", displayProductName(owner.name)))
                     else -> {
                         barcodes = (parseBarcodeList(barcodes) + code).distinct().joinToString("\n")
                         showMessage(Fa.scan.added)
@@ -350,7 +355,7 @@ fun ProductFormScreen(productId: ID?, onDone: () -> Unit) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text(Fa.common.confirm) },
-            text = { Text(Fa.products.deleteConfirm.replace("{name}", existing.name)) },
+            text = { Text(Fa.products.deleteConfirm.replace("{name}", displayProductName(existing.name))) },
             confirmButton = {
                 TextButton(
                     onClick = {

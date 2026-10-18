@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeFa, normalizeTokens, toLatinDigits, toPersianDigits } from './normalizeFa';
 import { parseIntegerInput, parseNumberInput } from './numbers';
-import { compactParts, formatCompact, formatMoney, formatNumber } from './format';
+import { compactParts, displayProductName, formatCompact, formatMoney, formatNumber } from './format';
 import { describePieces, cartonPieces, piecesFrom, splitPieces } from './units';
 import { stackLevel, stockAlerts, stockState, valuate } from './valuation';
 import { buildSearchIndex, searchIndex } from './search';
@@ -117,6 +117,12 @@ describe('format', () => {
     const { value, suffix } = compactParts(999_950);
     expect(value).toBe('\u06F1');
     expect(suffix).toBe('\u0645\u06CC\u0644\u06CC\u0648\u0646');
+  });
+
+  it('shows a placeholder for a product saved without a name', () => {
+    expect(displayProductName('')).toBe('\u0628\u062F\u0648\u0646 \u0646\u0627\u0645');
+    expect(displayProductName('   ')).toBe('\u0628\u062F\u0648\u0646 \u0646\u0627\u0645');
+    expect(displayProductName('\u0638\u0631\u0641')).toBe('\u0638\u0631\u0641');
   });
 });
 

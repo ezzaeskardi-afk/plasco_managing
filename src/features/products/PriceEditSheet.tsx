@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { updateProduct } from '@/db/repos';
 import type { Product } from '@/db/types';
-import { formatNumber } from '@/domain/format';
+import { displayProductName, formatNumber } from '@/domain/format';
 import { parseIntegerInput } from '@/domain/numbers';
 import { fa } from '@/i18n/fa';
 import { toastError, toastUndo } from '@/lib/toast';
@@ -75,7 +75,7 @@ export function PriceEditSheet({ product, onClose }: { product: Product; onClose
       }}
     >
       <SheetContent title={fa.products.priceEdit}>
-        <p className="mb-4 truncate text-[0.9rem] text-crate">{product.name}</p>
+        <p className="mb-4 truncate text-[0.9rem] text-crate">{displayProductName(product.name)}</p>
 
         {/* With the cost lock on, the sheet edits retail/wholesale only; the
             hidden buy value is resubmitted unchanged so nothing is lost. */}
@@ -110,7 +110,7 @@ export function PriceEditSheet({ product, onClose }: { product: Product; onClose
         <p className="mb-4 text-[0.8rem] text-crate">{fa.products.priceEditHint}</p>
 
         <div className="flex gap-2">
-          <Button block disabled={saving} onClick={() => void save()}>
+          <Button className="flex-1" disabled={saving} onClick={() => void save()}>
             {fa.actions.save}
           </Button>
           <Button variant="secondary" onClick={onClose}>

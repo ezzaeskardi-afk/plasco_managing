@@ -4,7 +4,7 @@ import { EmptyState, Select } from '@/components/ui/misc';
 import { Input, Label } from '@/components/ui/input';
 import { listLocations, listMovements, listProducts } from '@/db/repos';
 import type { MovementType } from '@/db/types';
-import { formatJalali } from '@/domain/format';
+import { displayProductName, formatJalali } from '@/domain/format';
 import { fa } from '@/i18n/fa';
 import { addDays, cn, endOfDay, startOfDay } from '@/lib/utils';
 import { FILTER_TYPES } from './labels';
@@ -131,14 +131,17 @@ export function MovementsPage() {
         <EmptyState message={fa.empty.movementsFiltered} />
       ) : (
         <ul className="overflow-hidden rounded-input border border-line bg-paper">
-          {movements.map((movement) => (
-            <MovementRow
-              key={movement.id}
-              movement={movement}
-              locationName={locationMap.get(movement.locationId)}
-              productName={productMap.get(movement.productId)?.name}
-            />
-          ))}
+          {movements.map((movement) => {
+            const product = productMap.get(movement.productId);
+            return (
+              <MovementRow
+                key={movement.id}
+                movement={movement}
+                locationName={locationMap.get(movement.locationId)}
+                productName={product ? displayProductName(product.name) : undefined}
+              />
+            );
+          })}
         </ul>
       )}
     </div>

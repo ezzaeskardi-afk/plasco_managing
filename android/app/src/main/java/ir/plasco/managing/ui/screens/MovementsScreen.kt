@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.plasco.managing.domain.displayProductName
 import ir.plasco.managing.domain.formatJalali
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.formatTime
@@ -46,7 +47,7 @@ fun MovementsScreen(onNewMovement: () -> Unit, onOpenProduct: (ID) -> Unit) {
     val products by container.hub.products.collectAsStateWithLifecycle()
     val locations by container.hub.locations.collectAsStateWithLifecycle()
 
-    val productNames = remember(products) { products.associate { it.id to it.name } }
+    val productNames = remember(products) { products.associate { it.id to displayProductName(it.name) } }
     val locationNames = remember(locations) { locations.associate { it.id to it.name } }
     // حرکتی که خودش واگرد شده، دکمهٔ واگرد ندارد.
     val undoneIds = remember(movements) { movements.mapNotNull { it.undoOf }.toSet() }

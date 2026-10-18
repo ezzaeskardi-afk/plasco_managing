@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ir.plasco.managing.domain.displayProductName
 import ir.plasco.managing.domain.formatCompact
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.stackLevel
@@ -171,11 +172,11 @@ fun ProductRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ProductThumb(productId = product.id, name = product.name)
+        ProductThumb(productId = product.id, name = displayProductName(product.name))
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                product.name,
+                displayProductName(product.name),
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

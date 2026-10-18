@@ -1,5 +1,20 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ChevronLeft, Download, Sparkles } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Boxes,
+  ChevronLeft,
+  Download,
+  Package,
+  PackageOpen,
+  PackagePlus,
+  ShoppingBasket,
+  Sparkles,
+  Tag,
+  TrendingUp,
+  Truck,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isBackupStale } from '@/app/appStatus';
@@ -8,14 +23,29 @@ import { MoneyText, Panel, Section } from '@/components/common/Kpi';
 import { StockStack } from '@/components/common/StockStack';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/misc';
-import { listBrands, listCategories, listLocations, listProducts, listStockLevels } from '@/db/repos';
+import {
+  listBrands,
+  listCategories,
+  listLocations,
+  listMovements,
+  listProducts,
+  listStockLevels,
+} from '@/db/repos';
 import { seedSynthetic } from '@/db/seed';
 import type { ID } from '@/db/types';
-import { formatQty } from '@/domain/format';
+import { displayProductName, formatQty } from '@/domain/format';
 import { stockAlerts, valuate, type GroupValuation } from '@/domain/valuation';
 import { fa } from '@/i18n/fa';
 import { toastSuccess } from '@/lib/toast';
 import { useSettings } from '@/app/settings-context';
+import { MovementRow } from '@/features/stock/MovementRow';
+
+const QUICK_ACTIONS: ReadonlyArray<{ to: string; label: string; icon: LucideIcon }> = [
+  { to: '/stock/receive', label: fa.stock.receive, icon: ShoppingBasket },
+  { to: '/stock/issue', label: fa.stock.issue, icon: Truck },
+  { to: '/stock/transfer', label: fa.stock.transfer, icon: ArrowLeftRight },
+  { to: '/products/new', label: fa.products.new, icon: PackagePlus },
+];
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -25,6 +55,7 @@ export function DashboardPage() {
   const locations = useLiveQuery(() => listLocations(), []);
   const brands = useLiveQuery(() => listBrands(), []);
   const categories = useLiveQuery(() => listCategories(), []);
+  const movements = useLiveQuery(() => listMovements({ limit: 5 }), []);
 
   const summary = useMemo(() => valuate(products ?? [], levels ?? []), [products, levels]);
   const alerts = useMemo(() => stockAlerts(products ?? [], levels ?? []), [products, levels]);
@@ -32,6 +63,10 @@ export function DashboardPage() {
   const locationNames = useMemo(
     () => new Map((locations ?? []).map((l) => [l.id, l.name])),
     [locations],
+  );
+  const productNames = useMemo(
+    () => new Map((products ?? []).map((p) => [p.id, displayProductName(p.name)])),
+    [products],
   );
   const brandNames = useMemo(() => new Map((brands ?? []).map((b) => [b.id, b.name])), [brands]);
   const categoryNames = useMemo(
@@ -46,6 +81,7 @@ export function DashboardPage() {
   if (products.length === 0) {
     return (
       <EmptyState
+        icon={<PackageOpen className="size-7" />}
         message={fa.empty.products}
         action={
           <div className="flex flex-wrap justify-center gap-2">
@@ -82,6 +118,7 @@ export function DashboardPage() {
       {/* One surface, 2x2 numerals - not four separate cards. */}
       <Panel className="mb-4 grid grid-cols-2 gap-2">
         <KpiCell
+          icon={Boxes}
           label={fa.dashboard.pieces}
           onClick={() => navigate('/products?sort=qty')}
           node={
@@ -91,6 +128,7 @@ export function DashboardPage() {
           }
         />
         <KpiCell
+          icon={Package}
           label={fa.dashboard.skus}
           onClick={() => navigate('/products')}
           node={
@@ -100,20 +138,103 @@ export function DashboardPage() {
           }
         />
         <KpiCell
+          icon={Wallet}
           label={fa.dashboard.costValue}
           onClick={() => navigate('/products?sort=value')}
           node={<MoneyText value={summary.cost} className="whitespace-nowrap text-[1.6rem] font-extrabold sm:text-[2rem]" compact showLabel={false} />}
         />
         <KpiCell
+          icon={Tag}
           label={fa.dashboard.retailValue}
           onClick={() => navigate('/products?sort=value')}
           node={<MoneyText value={summary.retail} className="whitespace-nowrap text-[1.6rem] font-extrabold sm:text-[2rem]" compact showLabel={false} />}
         />
         <div className="col-span-2 flex items-center justify-between border-t border-line pt-3">
-          <span className="text-crate">{fa.dashboard.potentialProfit}</span>
+          <span className="flex items-center gap-1.5 text-crate">
+            <TrendingUp className="size-4" />
+            {fa.dashboard.potentialProfit}
+          </span>
           <MoneyText value={summary.potentialProfit} className="text-title font-bold text-ok" />
         </div>
       </Panel>
+
+      <Section title={fa.dashboard.quickTitle}>
+        <div className="grid grid-cols-4 gap-2">
+          {QUICK_ACTIONS.map((action) => (
+            <button
+              key={action.to}
+              type="button"
+              onClick={() => navigate(action.to)}
+              className="flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-input border border-line bg-paper px-1 py-3 text-ink transition-colors hover:border-basin"
+            >
+              <action.icon className="size-6 text-basin" />
+              <span className="text-center text-[0.8rem] leading-snug">{action.label}</span>
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      <Section title={fa.dashboard.lowStock}>
+        {alerts.low.length === 0 ? (
+          <p className="text-crate">{fa.dashboard.lowStockEmpty}</p>
+        ) : (
+          <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
+            {alerts.low.slice(0, 8).map((row) => (
+              <ProductAlertRow
+                key={row.product.id}
+                name={displayProductName(row.product.name)}
+                code={row.product.code}
+                total={row.total}
+                minStock={row.product.minStock}
+                onOpen={() => navigate(`/products/${row.product.id}`)}
+              />
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section title={fa.dashboard.outOfStock}>
+        {alerts.out.length === 0 ? (
+          <p className="text-crate">{fa.dashboard.outOfStockEmpty}</p>
+        ) : (
+          <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
+            {alerts.out.slice(0, 8).map((row) => (
+              <ProductAlertRow
+                key={row.product.id}
+                name={displayProductName(row.product.name)}
+                code={row.product.code}
+                total={row.total}
+                onOpen={() => navigate(`/products/${row.product.id}`)}
+              />
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section
+        title={fa.dashboard.recentTitle}
+        action={
+          <Button size="sm" variant="ghost" onClick={() => navigate('/movements')}>
+            {fa.dashboard.viewAll}
+            <ChevronLeft className="size-4" />
+          </Button>
+        }
+      >
+        {(movements ?? []).length === 0 ? (
+          <p className="text-crate">{fa.dashboard.recentEmpty}</p>
+        ) : (
+          <ul className="overflow-hidden rounded-input border border-line bg-paper">
+            {(movements ?? []).map((movement) => (
+              <MovementRow
+                key={movement.id}
+                movement={movement}
+                locationName={locationNames.get(movement.locationId)}
+                productName={productNames.get(movement.productId)}
+              />
+            ))}
+          </ul>
+        )}
+      </Section>
 
       <Section title={fa.dashboard.byLocation}>
         <Breakdown
@@ -143,43 +264,6 @@ export function DashboardPage() {
         </Section>
       </div>
 
-      <Section title={fa.dashboard.lowStock}>
-        {alerts.low.length === 0 ? (
-          <p className="text-crate">{fa.dashboard.lowStockEmpty}</p>
-        ) : (
-          <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
-            {alerts.low.slice(0, 8).map((row) => (
-              <ProductAlertRow
-                key={row.product.id}
-                name={row.product.name}
-                code={row.product.code}
-                total={row.total}
-                minStock={row.product.minStock}
-                onOpen={() => navigate(`/products/${row.product.id}`)}
-              />
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title={fa.dashboard.outOfStock}>
-        {alerts.out.length === 0 ? (
-          <p className="text-crate">{fa.dashboard.outOfStockEmpty}</p>
-        ) : (
-          <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
-            {alerts.out.slice(0, 8).map((row) => (
-              <ProductAlertRow
-                key={row.product.id}
-                name={row.product.name}
-                code={row.product.code}
-                total={row.total}
-                onOpen={() => navigate(`/products/${row.product.id}`)}
-              />
-            ))}
-          </ul>
-        )}
-      </Section>
-
       <p className="mt-8 text-center text-[0.8rem] text-crate">
         {fa.settings.version} {APP_VERSION}
       </p>
@@ -188,10 +272,12 @@ export function DashboardPage() {
 }
 
 function KpiCell({
+  icon: Icon,
   label,
   node,
   onClick,
 }: {
+  icon: LucideIcon;
   label: string;
   node: ReactNode;
   onClick: () => void;
@@ -200,9 +286,12 @@ function KpiCell({
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-start gap-1 rounded-input p-2 text-start"
+      className="flex flex-col items-start gap-1 rounded-input p-2 text-start transition-colors hover:bg-frost"
     >
-      <span className="text-[0.9rem] text-crate">{label}</span>
+      <span className="flex items-center gap-1.5 text-[0.9rem] text-crate">
+        <Icon className="size-4 shrink-0" />
+        {label}
+      </span>
       {node}
     </button>
   );

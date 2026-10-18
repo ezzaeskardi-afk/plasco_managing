@@ -1,0 +1,29 @@
+# پلاسکو منیجینگ — تنظیمات Apache / هاست اشتراکی (cPanel و مشابه)
+# اگر هاستت این فرمت را نمی‌خواند (Netlify/Cloudflare Pages) فایل _headers را ببین.
+
+# نوع درست فایل‌ها؛ بدون این‌ها کروم مانیفست را نمی‌خواند و دکمه‌ی نصب نمی‌آید.
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+  AddType font/woff2 .woff2
+  AddType image/svg+xml .svg
+</IfModule>
+
+<IfModule mod_headers.c>
+  # پوسته‌ی اپ، سرویس‌ورکر و مانیفست نباید کش شوند، وگرنه کاربر نسخه‌ی قدیمی می‌ماند.
+  <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "^workbox-.*\.js$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+  # فایل‌های پوشه‌ی assets نام‌شان هش دارد؛ می‌توانند یک‌ساله کش شوند.
+  ExpiresActive On
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+</IfModule>

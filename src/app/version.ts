@@ -1,3 +1,3 @@
-export const APP_VERSION = '1.2.10';
+export const APP_VERSION = '1.2.11';
 /** Dexie schema generation; v2 added the import journal (`imports`/`importEntries`). */
 export const SCHEMA_VERSION = 2;

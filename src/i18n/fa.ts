@@ -313,6 +313,8 @@ export const fa = {
     exportTitle: 'گرفتن فایل',
     exportExcel: 'گرفتن فایل اکسل',
     exportCsv: 'گرفتن فایل CSV',
+    sheetProducts: 'کالاها',
+    sheetLevels: 'موجودی',
     backupTitle: 'بکاپ (نسخهٔ پشتیبان)',
     backupCreate: 'گرفتن بکاپ',
     backupHint: 'همهٔ کالاها، ورود و خروج‌ها و عکس‌ها در یک فایل ZIP.',

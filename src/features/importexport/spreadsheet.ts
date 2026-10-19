@@ -81,23 +81,137 @@ export async function readTableFile(file: File): Promise<ParsedTable> {
 
 export interface SheetSpec {
   name: string;
+  /** Optional heading printed in a merged row above the table. */
+  title?: string;
   header: readonly string[];
   rows: ReadonlyArray<ReadonlyArray<string | number>>;
 }
 
-/** Writes an .xlsx workbook with RTL sheet views. */
+const HEADER_FILL = 'FF0B7285';
+const HEADER_INK = 'FFFFFFFF';
+const GRID_LINE = 'FFDCE4E7';
+const STRIPE_FILL = 'FFF3F8F9';
+
+function solidFill(argb: string): ExcelJS.Fill {
+  return { type: 'pattern', pattern: 'solid', fgColor: { argb } };
+}
+
+function hairline(argb: string): ExcelJS.Border {
+  return { style: 'thin', color: { argb } };
+}
+
+/** Width per column from the longest cell or header text (Persian runs a little wider than Latin). */
+function fitWidths(
+  header: readonly string[],
+  rows: ReadonlyArray<ReadonlyArray<string | number>>,
+): number[] {
+  return header.map((title, index) => {
+    let longest = title.length;
+    for (const row of rows) {
+      const cell = row[index];
+      if (cell === undefined || cell === '') continue;
+      const length = String(cell).length;
+      if (length > longest) longest = length;
+    }
+    return Math.min(44, Math.max(10, Math.round(longest * 1.15) + 3));
+  });
+}
+
+/**
+ * Writes an .xlsx workbook: one styled, frozen, filterable table per sheet, RTL views,
+ * banded rows, a brand-coloured header and thousands-separated numbers. Everything is
+ * explicit cell formatting, so the file looks the same in Excel, WPS and LibreOffice.
+ */
 export async function buildWorkbook(sheets: readonly SheetSpec[]): Promise<Blob> {
   const Excel = await loadExcel();
   const workbook = new Excel.Workbook();
-  for (const spec of sheets) {
-    const sheet = workbook.addWorksheet(spec.name, { views: [{ rightToLeft: true }] });
-    sheet.addRow([...spec.header]);
-    sheet.getRow(1).font = { bold: true };
-    for (const row of spec.rows) sheet.addRow([...row]);
-    spec.header.forEach((_, index) => {
-      sheet.getColumn(index + 1).width = 18;
+  workbook.creator = 'پلاسکو منیجینگ';
+
+  sheets.forEach((spec, index) => {
+    const startRow = spec.title ? 2 : 1;
+    const columns = spec.header.length;
+    const lastRow = startRow + spec.rows.length;
+    const sheet = workbook.addWorksheet(spec.name, {
+      views: [{ rightToLeft: true, state: 'frozen', ySplit: startRow }],
+      properties: { defaultRowHeight: 22 },
+      pageSetup: {
+        paperSize: 9,
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        printTitlesRow: `${startRow}:${startRow}`,
+        margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+      },
     });
-  }
+
+    if (spec.title) {
+      sheet.mergeCells(1, 1, 1, columns);
+      const cell = sheet.getCell(1, 1);
+      cell.value = spec.title;
+      cell.font = { bold: true, size: 13, color: { argb: HEADER_INK } };
+      cell.fill = solidFill(HEADER_FILL);
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.getRow(1).height = 32;
+    }
+
+    if (spec.rows.length > 0) {
+      sheet.addTable({
+        name: `Table${index + 1}`,
+        ref: `A${startRow}`,
+        headerRow: true,
+        style: {
+          theme: 'TableStyleLight1',
+          showRowStripes: false,
+          showFirstColumn: false,
+          showLastColumn: false,
+          showColumnStripes: false,
+        },
+        columns: spec.header.map((name) => ({ name, filterButton: true })),
+        rows: spec.rows.map((row) => [...row]),
+      });
+    } else {
+      const header = sheet.getRow(startRow);
+      spec.header.forEach((name, col) => {
+        header.getCell(col + 1).value = name;
+      });
+    }
+
+    const numeric = spec.header.map((_, col) => spec.rows.some((row) => typeof row[col] === 'number'));
+    for (let rowIndex = startRow; rowIndex <= lastRow; rowIndex += 1) {
+      const row = sheet.getRow(rowIndex);
+      const isHeader = rowIndex === startRow;
+      const isEvenData = !isHeader && (rowIndex - startRow) % 2 === 0;
+      if (isHeader) row.height = 30;
+      for (let col = 1; col <= columns; col += 1) {
+        const cell = row.getCell(col);
+        cell.border = {
+          top: hairline(GRID_LINE),
+          left: hairline(GRID_LINE),
+          bottom: hairline(GRID_LINE),
+          right: hairline(GRID_LINE),
+        };
+        if (isHeader) {
+          cell.font = { bold: true, size: 11, color: { argb: HEADER_INK } };
+          cell.fill = solidFill(HEADER_FILL);
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        } else {
+          if (isEvenData) cell.fill = solidFill(STRIPE_FILL);
+          if (numeric[col - 1]) {
+            cell.numFmt = '#,##0';
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          } else {
+            cell.alignment = { vertical: 'middle' };
+          }
+        }
+      }
+    }
+
+    fitWidths(spec.header, spec.rows).forEach((width, col) => {
+      sheet.getColumn(col + 1).width = width;
+    });
+  });
+
   const buffer = await workbook.xlsx.writeBuffer();
   return new Blob([buffer as unknown as BlobPart], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

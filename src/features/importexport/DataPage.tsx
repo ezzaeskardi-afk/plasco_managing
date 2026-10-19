@@ -108,9 +108,22 @@ export function DataPage() {
         ]);
 
       if (kind === 'xlsx') {
+        const stampDate = formatJalali(Date.now());
+        const shop = settings.shopName.trim() || fa.app.defaultShopName;
+        const sheetTitle = (name: string) => `${name} — ${shop} — ${stampDate}`;
         const blob = await buildWorkbook([
-          { name: 'کالاها', header: productHeader, rows: productRows },
-          { name: 'موجودی', header: levelHeader, rows: levelRows },
+          {
+            name: fa.importexport.sheetProducts,
+            title: sheetTitle(fa.importexport.sheetProducts),
+            header: productHeader,
+            rows: productRows,
+          },
+          {
+            name: fa.importexport.sheetLevels,
+            title: sheetTitle(fa.importexport.sheetLevels),
+            header: levelHeader,
+            rows: levelRows,
+          },
         ]);
         await saveBlob(blob, `plasco-products-${stamp()}.xlsx`);
         toastSuccess(fa.importexport.exportExcel);

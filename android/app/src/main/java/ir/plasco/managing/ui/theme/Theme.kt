@@ -1,6 +1,7 @@
 package ir.plasco.managing.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -10,10 +11,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
+import ir.plasco.managing.R
 import ir.plasco.managing.model.StockState
 import ir.plasco.managing.model.ThemeMode
 
@@ -56,15 +59,49 @@ private val DarkColors = darkColorScheme(
     onError = Color(0xFF40191B),
 )
 
-private val PlascoTypography = Typography(
-    headlineMedium = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 34.sp),
-    titleLarge = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp),
-    titleMedium = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, lineHeight = 27.sp),
-    bodyLarge = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Medium, lineHeight = 29.sp),
-    bodyMedium = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, lineHeight = 26.sp),
-    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 22.sp),
-    labelMedium = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp),
+// فونت وزیرمتن (نسخهٔ ۳۳٫۰۰۳، همان نسخهٔ وب) همراه خود برنامه است؛ چهار وزنِ ثابت
+// (Regular/Medium/Bold/ExtraBold) به‌اندازهٔ همان وزن‌هایی که رابط استفاده می‌کند.
+// مجوز SIL OFL در android/Vazirmatn-OFL.txt نگه داشته می‌شود.
+private val Vazirmatn = FontFamily(
+    Font(R.font.vazirmatn_regular, FontWeight.Normal),
+    Font(R.font.vazirmatn_medium, FontWeight.Medium),
+    Font(R.font.vazirmatn_bold, FontWeight.Bold),
+    Font(R.font.vazirmatn_extrabold, FontWeight.ExtraBold),
 )
+
+private val PlascoTypography = Typography().let { base ->
+    Typography(
+        displayLarge = base.displayLarge.copy(fontFamily = Vazirmatn),
+        displayMedium = base.displayMedium.copy(fontFamily = Vazirmatn),
+        displaySmall = base.displaySmall.copy(fontFamily = Vazirmatn),
+        headlineLarge = base.headlineLarge.copy(fontFamily = Vazirmatn),
+        headlineMedium = base.headlineMedium.copy(
+            fontFamily = Vazirmatn, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 34.sp,
+        ),
+        headlineSmall = base.headlineSmall.copy(fontFamily = Vazirmatn),
+        titleLarge = base.titleLarge.copy(
+            fontFamily = Vazirmatn, fontSize = 21.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp,
+        ),
+        titleMedium = base.titleMedium.copy(
+            fontFamily = Vazirmatn, fontSize = 18.sp, fontWeight = FontWeight.Bold, lineHeight = 27.sp,
+        ),
+        titleSmall = base.titleSmall.copy(fontFamily = Vazirmatn),
+        bodyLarge = base.bodyLarge.copy(
+            fontFamily = Vazirmatn, fontSize = 17.sp, fontWeight = FontWeight.Medium, lineHeight = 29.sp,
+        ),
+        bodyMedium = base.bodyMedium.copy(
+            fontFamily = Vazirmatn, fontSize = 15.sp, fontWeight = FontWeight.Medium, lineHeight = 26.sp,
+        ),
+        bodySmall = base.bodySmall.copy(fontFamily = Vazirmatn),
+        labelLarge = base.labelLarge.copy(
+            fontFamily = Vazirmatn, fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 22.sp,
+        ),
+        labelMedium = base.labelMedium.copy(
+            fontFamily = Vazirmatn, fontSize = 13.sp, fontWeight = FontWeight.Medium, lineHeight = 20.sp,
+        ),
+        labelSmall = base.labelSmall.copy(fontFamily = Vazirmatn),
+    )
+}
 
 /** رنگ میله‌های پشتهٔ موجودی. هرگز تنها حامل معنا نیست؛ عدد همیشه کنارش است. */
 @Composable
@@ -94,6 +131,8 @@ fun PlascoTheme(
     val scale = if (textScale > 0f) textScale else 1f
     CompositionLocalProvider(
         LocalDensity provides Density(density.density, density.fontScale * scale),
+        // متن‌هایی که استایل خودشان را نمی‌دهند هم وزیرمتن بگیرند.
+        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = Vazirmatn),
     ) {
         MaterialTheme(
             colorScheme = if (dark) DarkColors else LightColors,

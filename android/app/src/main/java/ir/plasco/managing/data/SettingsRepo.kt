@@ -10,8 +10,13 @@ import kotlinx.coroutines.withContext
 class SettingsRepo(private val helper: PlascoDb, private val hub: DataHub) {
 
     suspend fun update(transform: (Settings) -> Settings): Settings {
-        val next = transform(hub.settings.value)
         inTransaction { db ->
+            // Read inside the transaction so two screens saving at the same time
+            // cannot overwrite each other with a stale copy of the whole row.
+            val current = db.rawQuery("SELECT * FROM settings WHERE id = 1", null).use { cursor ->
+                if (cursor.moveToFirst()) cursor.toSettings() else error("SettingsMissing")
+            }
+            val next = transform(current)
             db.update(
                 "settings",
                 ContentValues().apply {

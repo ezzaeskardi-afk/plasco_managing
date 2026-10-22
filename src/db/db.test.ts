@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PlascoDb, ensureDefaults, DEFAULT_SETTINGS } from './dexie';
 import {
   DuplicateCodeError,
+  LocationHasStockError,
   ProductCodeExhaustedError,
   countProducts,
   clearSettings,
@@ -447,5 +448,16 @@ describe('reference data', () => {
     await softDelete('brands', brand.id, db);
     expect(await listBrands(db)).toEqual([]);
     expect(await db.brands.count()).toBe(1);
+  });
+
+  it('refuses to hide a location that still holds stock', async () => {
+    const product = await createProduct(draft(), db);
+    await applyMovement({ productId: product.id, locationId: 'loc-shop', type: 'receive', qty: 7 }, db);
+
+    await expect(softDelete('locations', 'loc-shop', db)).rejects.toBeInstanceOf(
+      LocationHasStockError,
+    );
+    expect((await listLocations(db)).some((location) => location.id === 'loc-shop')).toBe(true);
+    expect(await productLevels(product.id, db)).toEqual([{ locationId: 'loc-shop', qty: 7 }]);
   });
 });

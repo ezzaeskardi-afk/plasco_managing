@@ -48,6 +48,12 @@ private data class ParsedBackup(val tables: JSONObject, val exportedAt: Long)
 /** شمارهٔ قالب بکاپ؛ همان نسخهٔ اسکیمای نسخهٔ وب است، نه نسخهٔ جدول‌های اندروید. */
 const val BACKUP_SCHEMA_VERSION = 2
 
+// سقف‌ها فقط برای جلوگیری از فایل مخرب/زیپ‌بمب‌اند، نه محدودکردن بکاپ واقعی:
+// چند هزار کالا و عکس در این محدوده جا می‌شوند.
+private const val MAX_DATA_JSON_BYTES = 32 * 1024 * 1024
+private const val MAX_PHOTO_ENTRY_BYTES = 8 * 1024 * 1024
+internal const val MAX_BACKUP_FILE_BYTES = 512L * 1024 * 1024
+
 private enum class Kind { Text, Int, OptionalText, OptionalInt, Bool, Barcodes }
 
 private data class Column(val key: String, val kind: Kind)
@@ -240,8 +246,10 @@ class BackupRepo(
                     // تداخل‌دارش را عوض کند یا شمارندهٔ renumbered را بالا ببرد.
                     if (shouldSkip(db, spec, row, mode)) continue
                     if (spec.name == "products") {
-                        val code = row.optString("code")
-                        if (code.isNotEmpty() && codeTakenByOther(db, code, row.optString("id"))) {
+                        val code = row.optString("code").trim()
+                        // A blank code would make two products collide on the
+                        // unique index; give every such row a fresh code too.
+                        if (code.isEmpty() || codeTakenByOther(db, code, row.optString("id"))) {
                             var newCode = "P-" + nextCode.toString().padStart(5, '0')
                             while (codeTakenByOther(db, newCode, row.optString("id"))) {
                                 nextCode += 1
@@ -267,7 +275,10 @@ class BackupRepo(
             // موجودی‌ها همیشه از روی حرکات بازسازی می‌شوند (قفسه‌ها حفظ).
             stock.rebuildLevelsInTransaction(db)
             if (renumbered > 0) {
-                db.update("settings", ContentValues().apply { put("nextProductNo", nextCode) }, "id = 1", null)
+                // writeSettings may already have raised the counter from the
+                // file; renumbering must never lower it back to the local value.
+                val desired = maxOf(nextCode, nextProductNo(db))
+                db.update("settings", ContentValues().apply { put("nextProductNo", desired) }, "id = 1", null)
             }
             db.setTransactionSuccessful()
         } finally {
@@ -304,7 +315,29 @@ class BackupRepo(
         if (version <= 0) throw BackupInvalidException("schema-missing")
         if (version > BACKUP_SCHEMA_VERSION) throw BackupInvalidException("schema-newer:$version")
         val tables = parsed.optJSONObject("tables") ?: throw BackupInvalidException("tables-missing")
+        validateTables(tables)
         return ParsedBackup(tables, parsed.optLong("exportedAt", 0L))
+    }
+
+    /**
+     * هر جدول باید صریحاً در فایل باشد. پیش‌تر نبودِ یک آرایه «جدول خالی» تفسیر
+     * می‌شد و بازیابی جایگزینی، دیتابیس را با فایل ناقص خالی می‌کرد.
+     */
+    private fun validateTables(tables: JSONObject) {
+        for (spec in TABLES) {
+            val rows = tables.opt(spec.name)
+            if (rows !is JSONArray) throw BackupInvalidException("table-missing:${spec.name}")
+            for (index in 0 until rows.length()) {
+                val row = rows.optJSONObject(index)
+                    ?: throw BackupInvalidException("${spec.name}:$index:row")
+                if (rowKey(spec, row) == null) {
+                    throw BackupInvalidException("${spec.name}:$index:key")
+                }
+            }
+        }
+        if (tables.opt("settings") !is JSONArray) {
+            throw BackupInvalidException("table-missing:settings")
+        }
     }
 
     private fun readDataJson(input: InputStream): String {
@@ -313,21 +346,44 @@ class BackupRepo(
         buffered.mark(1)
         val first = buffered.read()
         buffered.reset()
-        if (first == '{'.code) return buffered.readBytes().toString(Charsets.UTF_8)
+        if (first == '{'.code) {
+            return readLimited(buffered, MAX_DATA_JSON_BYTES, "data-json-too-large")
+                .toString(Charsets.UTF_8)
+        }
         try {
             ZipInputStream(buffered).use { zip ->
                 var entry: ZipEntry? = zip.nextEntry
                 while (entry != null) {
                     if (entry.name == "data.json") {
-                        return zip.readBytes().toString(Charsets.UTF_8)
+                        if (entry.size > MAX_DATA_JSON_BYTES) {
+                            throw BackupInvalidException("data-json-too-large")
+                        }
+                        return readLimited(zip, MAX_DATA_JSON_BYTES, "data-json-too-large")
+                            .toString(Charsets.UTF_8)
                     }
                     entry = zip.nextEntry
                 }
             }
+        } catch (error: BackupInvalidException) {
+            throw error
         } catch (error: Throwable) {
             throw BackupInvalidException("unzip-failed")
         }
         throw BackupInvalidException("data-json-missing")
+    }
+
+    private fun readLimited(input: InputStream, limit: Int, detail: String): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > limit) throw BackupInvalidException(detail)
+            out.write(buffer, 0, read)
+        }
+        return out.toByteArray()
     }
 
     private fun exportTable(db: SQLiteDatabase, spec: TableSpec): JSONArray {
@@ -397,9 +453,20 @@ class BackupRepo(
         if (spec.columns.none { it.key == "updatedAt" }) return false
         val key = rowKey(spec, row) ?: return false
         val incoming = row.optLong("updatedAt", 0L)
-        val existing = db.query(spec.name, arrayOf("updatedAt"), key.first, key.second, null, null, null)
-            .use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
-        return existing != null && existing >= incoming
+        val withBin = spec.name == "stockLevels"
+        val columns = if (withBin) arrayOf("updatedAt", "bin") else arrayOf("updatedAt")
+        val existing = db.query(spec.name, columns, key.first, key.second, null, null, null)
+            .use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val bin = if (withBin && !cursor.isNull(1)) cursor.getString(1) else null
+                cursor.getLong(0) to bin
+            }
+        if (existing == null) return false
+        if (existing.first < incoming) return false
+        // A shelf position is not derivable from movements. Even an older file
+        // may fill a bin the local row is missing; the newer local bin still wins.
+        if (withBin && row.optString("bin").isNotEmpty() && existing.second.isNullOrEmpty()) return false
+        return true
     }
 
     /** کلید ردیف برای پرس‌وجوی «وجود دارد یا نه» — stockLevels کلید ترکیبی دارد. */
@@ -444,6 +511,14 @@ class BackupRepo(
             val exists = db.query(spec.name, arrayOf("updatedAt"), key.first, key.second, null, null, null)
                 .use { it.moveToFirst() }
             if (exists) {
+                // The incoming row wins as a whole; absent optional columns must
+                // clear the local value (not keep a stale deletedAt/brandId).
+                for (column in spec.columns) {
+                    if (row.has(column.key)) continue
+                    if (column.kind == Kind.OptionalText || column.kind == Kind.OptionalInt) {
+                        values.putNull(column.key)
+                    }
+                }
                 db.update(spec.name, values, key.first, key.second)
                 return true
             }

@@ -176,6 +176,14 @@ export function StockOpPage() {
       toastError(fa.stock.pickProduct);
       return;
     }
+    if (!locationId) {
+      toastError(fa.stock.pickLocation);
+      return;
+    }
+    if (op === 'transfer' && !toLocationId) {
+      toastError(fa.stock.pickLocation);
+      return;
+    }
     setBusy(true);
     try {
       if (op === 'adjust') {
@@ -385,7 +393,11 @@ export function StockOpPage() {
       </div>
 
       <div className="flex gap-2">
-        <Button className="flex-1" disabled={busy || !product} onClick={() => void submit()}>
+        <Button
+          className="flex-1"
+          disabled={busy || !product || !locationId || (op === 'transfer' && !toLocationId)}
+          onClick={() => void submit()}
+        >
           {OP_TITLES[op] ?? fa.stock.receive}
         </Button>
         <Button variant="secondary" onClick={() => navigate(-1)}>

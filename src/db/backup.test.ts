@@ -77,6 +77,14 @@ describe('backup and restore', () => {
     expect(await db.priceChanges.count()).toBe(1);
   });
 
+  it('refuses a data.json that expands beyond the size cap', async () => {
+    const oversized = new Uint8Array(33 * 1024 * 1024);
+    const blob = new Blob([zipSync({ 'data.json': oversized }) as unknown as BlobPart], {
+      type: 'application/zip',
+    });
+    await expect(readBackup(blob)).rejects.toMatchObject({ detail: 'data-json-too-large' });
+  });
+
   it('fails with a readable error when a stored photo cannot be read', async () => {
     const product = await seedCatalogue(db);
     await seedUnreadablePhoto(product.id, db);
@@ -109,6 +117,27 @@ describe('backup and restore', () => {
     expect(await db.movements.count()).toBe(2);
     expect((await listProducts(db)).length).toBe(1);
     expect((await listProducts(db))[0]?.code).toBe(product.code);
+  });
+
+  it('merge raises nextProductNo from the file without a code clash', async () => {
+    await seedCatalogue(db);
+
+    const other = new PlascoDb(`test-backup-other-${dbIndex}`);
+    await other.open();
+    try {
+      await createProduct(
+        { name: 'سطل', code: 'OTHER-1', buyPrice: 5_000, retailPrice: 9_000 },
+        other,
+      );
+      await setSettings({ nextProductNo: 50 }, other);
+      const moved = await createBackup(other);
+
+      const result = await restoreBackup(moved.blob, 'merge', db);
+      expect(result.renumbered).toBe(0);
+      expect((await db.settings.get('nextProductNo'))?.value).toBe(50);
+    } finally {
+      await other.delete();
+    }
   });
 
   it('accepts a merge of a second device catalogue without losing rows', async () => {
@@ -256,6 +285,20 @@ describe('backup and restore', () => {
     await restoreBackup(blob, 'replace', db);
     expect(await db.imports.count()).toBe(0);
     expect(await db.importEntries.count()).toBe(0);
+  });
+
+  it('replace drops settings that the file does not contain', async () => {
+    const product = await seedCatalogue(db);
+    await setSettings({ deviceName: 'این گوشی', devicePrefix: 'A' }, db);
+    const { blob } = await createBackup(db);
+
+    await setSettings({ costLockPinHash: 'stale-hash' }, db);
+    await restoreBackup(blob, 'replace', db);
+
+    expect(await db.settings.get('costLockPinHash')).toBeUndefined();
+    expect((await db.settings.get('deviceName'))?.value).toBe('این گوشی');
+    expect((await db.settings.get('devicePrefix'))?.value).toBe('A');
+    expect((await db.products.get(product.id))?.name).toBe(product.name);
   });
 
   it('refuses a backup that a newer app version wrote', async () => {

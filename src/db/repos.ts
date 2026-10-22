@@ -188,6 +188,13 @@ export async function updateLocation(
   await target.locations.update(id, patch);
 }
 
+export class LocationHasStockError extends Error {
+  constructor(readonly qty: number) {
+    super(`LocationHasStock:${qty}`);
+    this.name = 'LocationHasStockError';
+  }
+}
+
 /** Soft delete; used for brands, categories, locations and products. */
 export async function softDelete(
   table: 'brands' | 'categories' | 'locations' | 'products',
@@ -195,6 +202,20 @@ export async function softDelete(
   target: PlascoDb = db,
 ): Promise<void> {
   const at = now();
+  if (table === 'locations') {
+    // A hidden shelf with stock would disappear from every list while its
+    // quantity still counted in totals. Refuse until the shelf is emptied or
+    // the stock is moved, and do the check inside the same transaction.
+    await target.transaction('rw', target.locations, target.stockLevels, async () => {
+      const held = (await target.stockLevels.where('locationId').equals(id).toArray()).reduce(
+        (sum, level) => sum + Math.abs(level.qty),
+        0,
+      );
+      if (held > 0) throw new LocationHasStockError(held);
+      await target.locations.update(id, { deletedAt: at, updatedAt: at });
+    });
+    return;
+  }
   await target[table].update(id, { deletedAt: at, updatedAt: at });
 }
 

@@ -335,6 +335,33 @@ describe('import journal', () => {
     await undoImportBatch(commit.batchId, db);
     expect((await db.products.get(product.id))?.buyPrice).toBe(15_000);
   });
+
+  it('restores fields imported by later rows in separate chunks', async () => {
+    const product = await seedProduct();
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [
+        { نام: 'ظرف غذا', خرده: '۲۵۰۰۰' },
+        { نام: 'ظرف غذا', بارکد: '6260001', خرید: '۱۱۰۰۰' },
+      ],
+      { name: 'نام', barcode: 'بارکد', buy: 'خرید', retail: 'خرده' },
+      context,
+    );
+    expect(prepared.map((row) => row.action)).toEqual(['update', 'update']);
+
+    const commit = await commitRows(prepared, { chunkSize: 1 }, db);
+    if (!commit.batchId) throw new Error('expected a batch');
+    expect(await db.products.get(product.id)).toMatchObject({
+      buyPrice: 11_000,
+      retailPrice: 25_000,
+    });
+
+    await undoImportBatch(commit.batchId, db);
+    expect(await db.products.get(product.id)).toMatchObject({
+      buyPrice: 15_000,
+      retailPrice: 22_000,
+    });
+  });
 });
 
 describe('price-only mode', () => {

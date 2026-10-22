@@ -22,6 +22,9 @@ internal object BackupPhotos {
     private const val FULL = "full"
     private const val PREFIX = "photos/"
     private const val SUFFIX = ".jpg"
+    private const val MAX_ENTRIES = 40_000
+    private const val MAX_ENTRY_BYTES = 8 * 1024 * 1024
+    private const val MAX_TOTAL_BYTES = 512L * 1024 * 1024
 
     /** عکس‌ها را داخل ZIP می‌نویسد و تعداد عکس‌ها را برمی‌گرداند. */
     fun write(zip: ZipOutputStream, db: SQLiteDatabase): Int {
@@ -62,6 +65,9 @@ internal object BackupPhotos {
         // هر دو را پشت‌سرهم می‌نویسند، پس این نگاشت در عمل یک عضو دارد.
         val pending = HashMap<ID, MutableMap<String, ByteArray>>()
         walk(input) { productId, kind, data ->
+            // فقط JPEG واقعی و فقط برای کالایی که در همین فایل/دیتابیس هست.
+            // بایت دلخواه نباید به‌عنوان عکس در دیتابیس بنشیند.
+            if (!isJpeg(data) || !productExists(db, productId)) return@walk
             val slot = pending.getOrPut(productId) { HashMap() }
             slot[kind] = data
             val thumb = slot[THUMB]
@@ -73,6 +79,17 @@ internal object BackupPhotos {
         }
         return written
     }
+
+    private fun productExists(db: SQLiteDatabase, productId: ID): Boolean =
+        db.rawQuery("SELECT 1 FROM products WHERE id = ? LIMIT 1", arrayOf(productId)).use {
+            it.moveToFirst()
+        }
+
+    private fun isJpeg(data: ByteArray): Boolean =
+        data.size >= 4 &&
+            data[0] == 0xFF.toByte() &&
+            data[1] == 0xD8.toByte() &&
+            data[2] == 0xFF.toByte()
 
     private fun write(
         db: SQLiteDatabase,
@@ -116,9 +133,16 @@ internal object BackupPhotos {
     private fun walk(input: InputStream, onEntry: (ID, String, ByteArray) -> Unit) {
         ZipInputStream(input).use { zip ->
             var entry: ZipEntry? = zip.nextEntry
+            var entries = 0
+            var totalBytes = 0L
             while (entry != null) {
                 val name = entry.name
                 if (name.startsWith(PREFIX) && name.endsWith(SUFFIX)) {
+                    entries += 1
+                    if (entries > MAX_ENTRIES) throw BackupInvalidException("photos-too-many")
+                    if (entry.size > MAX_ENTRY_BYTES) {
+                        throw BackupInvalidException("photo-too-large:$name")
+                    }
                     val body = name.removePrefix(PREFIX).removeSuffix(SUFFIX)
                     val kind = when {
                         body.endsWith("-$THUMB") -> THUMB
@@ -127,12 +151,33 @@ internal object BackupPhotos {
                     }
                     if (kind != null) {
                         val productId = body.removeSuffix("-$kind")
-                        if (productId.isNotEmpty()) onEntry(productId, kind, zip.readBytes())
+                        if (productId.isNotEmpty()) {
+                            val data = readLimited(zip, MAX_ENTRY_BYTES, "photo-too-large:$name")
+                            totalBytes += data.size
+                            if (totalBytes > MAX_TOTAL_BYTES) {
+                                throw BackupInvalidException("photos-too-large")
+                            }
+                            onEntry(productId, kind, data)
+                        }
                     }
                 }
                 zip.closeEntry()
                 entry = zip.nextEntry
             }
         }
+    }
+
+    private fun readLimited(input: InputStream, limit: Int, detail: String): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > limit) throw BackupInvalidException(detail)
+            out.write(buffer, 0, read)
+        }
+        return out.toByteArray()
     }
 }

@@ -22,8 +22,8 @@ android {
         applicationId = "ir.plasco.managing"
         minSdk = 26
         targetSdk = 37
-        versionCode = 16
-        versionName = "1.2.12"
+        versionCode = 17
+        versionName = "2.0.0"
 
         // موتور بارکد ML Kit برای هر معماری یک کتابخانهٔ بومی ~۵ مگابایتی دارد
         // (libbarhopper_v3.so). گوشی‌های مغازه ARM هستند، پس فقط دو معماری واقعی

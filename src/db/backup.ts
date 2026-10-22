@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SCHEMA_VERSION } from '@/app/version';
 import { formatProductCode } from '@/domain/codes';
 import { fa } from '@/i18n/fa';
-import { db, type PlascoDb } from './dexie';
+import { db, ensureDefaults, type PlascoDb } from './dexie';
 import type { Product } from './types';
 import { rebuildStockLevels } from './rebuild';
 import { getSettings, setSettings } from './repos';
@@ -15,6 +15,12 @@ export class BackupInvalidError extends Error {
     this.name = 'BackupInvalidError';
   }
 }
+
+const MAX_BACKUP_FILE_BYTES = 512 * 1024 * 1024;
+const MAX_DATA_JSON_BYTES = 32 * 1024 * 1024;
+const MAX_PHOTO_ENTRY_BYTES = 8 * 1024 * 1024;
+const MAX_PHOTO_TOTAL_BYTES = 512 * 1024 * 1024;
+const MAX_PHOTO_ENTRIES = 40_000;
 
 const base = {
   id: z.string(),
@@ -243,10 +249,32 @@ export async function readBackup(file: Blob): Promise<{
   data: BackupData;
   photos: Map<ID, { thumb?: Uint8Array; full?: Uint8Array }>;
 }> {
+  if (file.size > MAX_BACKUP_FILE_BYTES) throw new BackupInvalidError('backup-too-large');
+
+  let photoEntries = 0;
+  let photoBytes = 0;
   let entries: Record<string, Uint8Array>;
   try {
-    entries = unzipSync(await blobToBytes(file));
+    entries = unzipSync(await blobToBytes(file), {
+      filter: (entry) => {
+        const size = entry.originalSize;
+        if (entry.name === 'data.json') {
+          if (size == null) throw new BackupInvalidError('archive-size-missing');
+          if (size > MAX_DATA_JSON_BYTES) throw new BackupInvalidError('data-json-too-large');
+          return true;
+        }
+        if (!isPhotoEntry(entry.name)) return false;
+        photoEntries += 1;
+        if (photoEntries > MAX_PHOTO_ENTRIES) throw new BackupInvalidError('too-many-photos');
+        if (size == null) throw new BackupInvalidError('archive-size-missing');
+        if (size > MAX_PHOTO_ENTRY_BYTES) throw new BackupInvalidError('photo-too-large');
+        photoBytes += size;
+        if (photoBytes > MAX_PHOTO_TOTAL_BYTES) throw new BackupInvalidError('photos-too-large');
+        return true;
+      },
+    });
   } catch (error) {
+    if (error instanceof BackupInvalidError) throw error;
     throw new BackupInvalidError(error instanceof Error ? error.message : 'unzip failed');
   }
   const dataEntry = entries['data.json'];
@@ -411,9 +439,13 @@ export async function restoreBackup(
         const merged = new Map(t.settings.map((row) => [row.key, row.value]));
         merged.set('deviceName', current.deviceName);
         merged.set('devicePrefix', current.devicePrefix);
+        // Settings absent from the file must not survive from the old dataset
+        // (a stale PIN hash, for example). Defaults fill the required keys.
+        await target.settings.clear();
         await target.settings.bulkPut(
           Array.from(merged.entries()).map(([key, value]) => ({ key, value })),
         );
+        await ensureDefaults(target);
         // Photos ride in the same transaction too: a crash never leaves data
         // from the new file with photos from the old one.
         for (const [productId, kinds] of photos) {
@@ -427,6 +459,7 @@ export async function restoreBackup(
             updatedAt: data.exportedAt,
           });
         }
+        await rebuildStockLevels(target);
       },
     );
   } else {
@@ -442,6 +475,7 @@ export async function restoreBackup(
         target.priceChanges,
         target.stockTakes,
         target.stockTakeItems,
+        target.photos,
         // Renumbering a conflicting code reads and writes settings.nextProductNo.
         target.settings,
       ],
@@ -450,6 +484,15 @@ export async function restoreBackup(
         await mergeTable(target.categories, t.categories);
         await mergeTable(target.locations, t.locations);
         renumbered = await mergeProductsRenumbering(target, t.products);
+        // A merge keeps this device's settings but must never let its product
+        // counter lag behind codes that arrived in the file.
+        const incomingNext = t.settings.find((row) => row.key === 'nextProductNo')?.value;
+        if (typeof incomingNext === 'number' && Number.isFinite(incomingNext)) {
+          const current = await getSettings(target);
+          if (incomingNext > current.nextProductNo) {
+            await setSettings({ nextProductNo: Math.round(incomingNext) }, target);
+          }
+        }
         await mergeTable(target.movements, t.movements);
         await mergeTable(target.priceChanges, t.priceChanges);
         await mergeTable(target.stockTakes, t.stockTakes);
@@ -469,28 +512,23 @@ export async function restoreBackup(
             updatedAt: Math.max(existing?.updatedAt ?? 0, level.updatedAt),
           });
         }
+        for (const [productId, kinds] of photos) {
+          const thumb = kinds.thumb;
+          const full = kinds.full;
+          if (!thumb || !full) continue;
+          const existing = await target.photos.get(productId);
+          if (existing && existing.updatedAt > data.exportedAt) continue;
+          await target.photos.put({
+            productId,
+            thumb: new Blob([thumb as unknown as BlobPart]),
+            full: new Blob([full as unknown as BlobPart]),
+            updatedAt: data.exportedAt,
+          });
+        }
+        await rebuildStockLevels(target);
       },
     );
   }
-
-  // Replace already wrote its photos inside the transaction above.
-  if (mode === 'merge') {
-    for (const [productId, kinds] of photos) {
-      const thumb = kinds.thumb;
-      const full = kinds.full;
-      if (!thumb || !full) continue;
-      const existing = await target.photos.get(productId);
-      if (existing && existing.updatedAt > data.exportedAt) continue;
-      await target.photos.put({
-        productId,
-        thumb: new Blob([thumb as unknown as BlobPart]),
-        full: new Blob([full as unknown as BlobPart]),
-        updatedAt: data.exportedAt,
-      });
-    }
-  }
-
-  await rebuildStockLevels(target);
 
   return { mode, products: t.products.length, movements: t.movements.length, renumbered };
 }

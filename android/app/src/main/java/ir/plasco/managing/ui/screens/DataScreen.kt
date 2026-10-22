@@ -24,7 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.provider.OpenableColumns
 import ir.plasco.managing.data.BackupInvalidException
+import ir.plasco.managing.data.MAX_BACKUP_FILE_BYTES
 import ir.plasco.managing.data.RestoreMode
 import ir.plasco.managing.data.RestoreSummary
 import ir.plasco.managing.domain.formatJalali
@@ -98,9 +100,37 @@ fun DataScreen(onBack: () -> Unit) {
                 val copied = withContext(Dispatchers.IO) {
                     val file = File.createTempFile("plasco-restore-", ".zip", context.cacheDir)
                     try {
+                        // اندازهٔ اعلام‌شده را همان اول رد می‌کنیم؛ اگر نامعلوم بود،
+                        // حین کپی هم سقف را نگه می‌داریم تا فایل غول‌آسا کش را پر نکند.
+                        val declared = context.contentResolver.query(
+                            uri,
+                            arrayOf(OpenableColumns.SIZE),
+                            null,
+                            null,
+                            null,
+                        )?.use { cursor ->
+                            if (cursor.moveToFirst()) cursor.getLong(0) else null
+                        }
+                        if (declared != null && declared > MAX_BACKUP_FILE_BYTES) {
+                            throw BackupInvalidException("file-too-large")
+                        }
                         val stream = context.contentResolver.openInputStream(uri)
                             ?: throw IllegalStateException(Fa.backup.fileFailed)
-                        stream.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+                        stream.use { input ->
+                            file.outputStream().use { output ->
+                                val buffer = ByteArray(64 * 1024)
+                                var total = 0L
+                                while (true) {
+                                    val read = input.read(buffer)
+                                    if (read < 0) break
+                                    total += read
+                                    if (total > MAX_BACKUP_FILE_BYTES) {
+                                        throw BackupInvalidException("file-too-large")
+                                    }
+                                    output.write(buffer, 0, read)
+                                }
+                            }
+                        }
                         file
                     } catch (error: Throwable) {
                         file.delete()

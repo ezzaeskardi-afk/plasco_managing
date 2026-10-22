@@ -1,12 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/misc';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Section } from '@/components/common/Kpi';
 import {
+  LocationHasStockError,
   createBrand,
   createCategory,
   createLocation,
@@ -80,11 +82,22 @@ export function LabelsPage() {
                     type="button"
                     aria-label={fa.actions.delete}
                     onClick={() => {
-                      void softDelete(kind, item.id).then(() => {
-                        toastUndo(fa.settings.removed, async () => {
-                          await restore(kind, item.id);
-                        });
-                      });
+                      void (async () => {
+                        try {
+                          await softDelete(kind, item.id);
+                          toastUndo(fa.settings.removed, async () => {
+                            await restore(kind, item.id);
+                          });
+                        } catch (error) {
+                          if (error instanceof LocationHasStockError) {
+                            toast.error(
+                              fa.settings.locationHasStock.replace('{qty}', formatQty(error.qty)),
+                            );
+                            return;
+                          }
+                          toast.error(fa.errors.title);
+                        }
+                      })();
                     }}
                     className="flex size-10 items-center justify-center rounded-input text-crate"
                   >

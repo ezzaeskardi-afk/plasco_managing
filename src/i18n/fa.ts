@@ -208,6 +208,7 @@ export const fa = {
     sameLocation: 'مکان «از» و «به» یکی است.',
     enterQty: 'تعداد را بنویس.',
     pickProduct: 'کالا را انتخاب کن',
+    pickLocation: 'مکان را انتخاب کن.',
     opNotFound: 'این نوع حرکت وجود ندارد.',
     movedTo: 'رفت به',
     undoFailed: 'واگرد نشد.',
@@ -444,6 +445,7 @@ export const fa = {
     phone: 'تلفن',
     removeConfirm: 'حذف شود؟',
     removed: 'حذف شد.',
+    locationHasStock: 'این مکان {qty} عدد موجودی دارد؛ اول موجودی را جابه‌جا کن.',
     pinFirst: 'برای روشن‌کردن قفل، اول یک رمز بگذار؛ بعد از آن به کار می‌افتد.',
   },
   status: {

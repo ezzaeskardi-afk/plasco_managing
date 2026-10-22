@@ -366,6 +366,20 @@ function beforeValues(existing: Product, draft: Partial<ProductDraft>): Imported
   return before;
 }
 
+/** Keep the first original value for each field across all rows of one product. */
+function mergeBeforeValues(
+  target: ImportedProductFields,
+  source: ImportedProductFields,
+): boolean {
+  let changed = false;
+  for (const key of Object.keys(source) as Array<keyof ImportedProductFields>) {
+    if (Object.prototype.hasOwnProperty.call(target, key)) continue;
+    (target as Record<string, unknown>)[key] = source[key];
+    changed = true;
+  }
+  return changed;
+}
+
 export async function commitRows(
   rows: readonly PreparedRow[],
   options: CommitOptions = {},
@@ -376,9 +390,12 @@ export async function commitRows(
   const usable = rows.filter((row) => row.action === 'new' || row.action === 'update');
   const batchId = newId();
   let movementsWritten = 0;
-  // One restore point per product: without this, a file with two rows touching
-  // the same product records the already-imported values as its «before».
-  const journaledUpdates = new Set<ID>();
+  // One restore point per product: merge the missing fields from every row so
+  // the undo restores the product's original state, even across chunks.
+  const journaledUpdates = new Map<
+    ID,
+    { entry: Extract<ImportEntry, { kind: 'product-updated' }>; original: Product }
+  >();
   // A file that names the same new brand on many rows must create it once.
   const createdBrands = new Map<string, ID>();
 
@@ -448,15 +465,31 @@ export async function commitRows(
                 await updateProduct(row.productId, partial, { reason: 'import' }, target);
                 productId = row.productId;
                 counts.updated += 1;
-                if (existing && !journaledUpdates.has(productId)) {
-                  journaledUpdates.add(productId);
-                  journal.push({
-                    id: newId(),
-                    batchId,
-                    kind: 'product-updated',
-                    productId,
-                    before: beforeValues(existing, partial),
-                  });
+                if (existing) {
+                  const journaled = journaledUpdates.get(productId);
+                  if (!journaled) {
+                    const entry: Extract<ImportEntry, { kind: 'product-updated' }> = {
+                      id: newId(),
+                      batchId,
+                      kind: 'product-updated',
+                      productId,
+                      before: beforeValues(existing, partial),
+                    };
+                    journaledUpdates.set(productId, { entry, original: existing });
+                    // Put immediately so later chunks can add fields to the same
+                    // entry; the enclosing transaction still rolls it back.
+                    await target.importEntries.put(entry);
+                  } else if (
+                    mergeBeforeValues(
+                      journaled.entry.before,
+                      beforeValues(journaled.original, partial),
+                    )
+                  ) {
+                    await target.importEntries.put({
+                      ...journaled.entry,
+                      before: { ...journaled.entry.before },
+                    });
+                  }
                 }
               } else {
                 counts.skipped += 1;

@@ -71,7 +71,7 @@ export function Scanner({
           aria-describedby={undefined}
           className="fixed inset-0 z-50 flex flex-col bg-black text-white"
         >
-          <div className="safe-t flex items-center justify-between gap-2 p-3">
+          <div className="flex items-center justify-between gap-2 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
             <DialogPrimitive.Title className="text-title font-bold">
               {fa.scan.title}
             </DialogPrimitive.Title>

@@ -116,7 +116,7 @@ export function AppShell() {
       {/* No page-title bar anywhere: the user asked for no name at the top of
           any page — the rail, the bottom nav and the content already say where
           you are (§11.23). */}
-      <main className="safe-t mx-auto w-full max-w-[1200px] px-4 pb-28 pt-4 lg:pb-10 lg:ps-64">
+      <main className="mx-auto w-full max-w-[1200px] px-4 pb-28 pt-[calc(env(safe-area-inset-top)+1.5rem)] lg:pb-10 lg:ps-64">
         <Outlet />
       </main>
 

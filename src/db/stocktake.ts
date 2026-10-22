@@ -44,6 +44,8 @@ export async function applyStockTake(
 
       const items = await target.stockTakeItems.where('stockTakeId').equals(sessionId).toArray();
       const countedIds = new Set(items.map((item) => item.productId));
+      const products = await target.products.toArray();
+      const liveIds = new Set(products.filter((product) => !product.deletedAt).map((product) => product.id));
       const movements: Movement[] = [];
       let unchanged = 0;
 
@@ -68,10 +70,12 @@ export async function applyStockTake(
         );
       };
 
-      for (const item of items) await applyCount(item.productId, item.counted);
+      for (const item of items) {
+        if (liveIds.has(item.productId)) await applyCount(item.productId, item.counted);
+      }
 
       if (options.treatUncountedAsZero) {
-        for (const product of await target.products.toArray()) {
+        for (const product of products) {
           if (product.deletedAt || countedIds.has(product.id)) continue;
           await applyCount(product.id, 0);
         }

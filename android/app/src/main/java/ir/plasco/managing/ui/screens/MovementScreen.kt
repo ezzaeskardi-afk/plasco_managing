@@ -25,9 +25,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.plasco.managing.data.LocationMemory
 import ir.plasco.managing.data.MovementInput
 import ir.plasco.managing.domain.cartonPieces
 import ir.plasco.managing.domain.findProductByBarcode
@@ -67,6 +69,7 @@ private const val PICKER_LIMIT = 20
 fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> Unit) {
     val container = LocalAppContainer.current
     val showMessage = LocalShowMessage.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val products by container.hub.products.collectAsStateWithLifecycle()
     val levels by container.hub.levels.collectAsStateWithLifecycle()
@@ -85,8 +88,8 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
         )
     }
     var productId by remember { mutableStateOf(initialProductId) }
-    var locationId by remember(locations) { mutableStateOf(locations.firstOrNull()?.id.orEmpty()) }
-    var toLocationId by remember(locations) { mutableStateOf(locations.getOrNull(1)?.id.orEmpty()) }
+    var locationId by remember { mutableStateOf("") }
+    var toLocationId by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
     var cartons by remember { mutableStateOf("") }
     var perCarton by remember { mutableStateOf("") }
@@ -134,10 +137,30 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
         perCarton = if (size > 1) size.toString() else ""
     }
 
+    // مکان آخر مثل نسخهٔ وب یاد می‌ماند؛ اگر آن مکان حذف شده باشد، اولین مکان
+    // زنده جایگزین می‌شود. انتخاب کاربر هم روی هر به‌روزرسانی live از دست نمی‌رود.
+    LaunchedEffect(locations) {
+        if (locations.none { it.id == locationId }) {
+            val remembered = LocationMemory.read(context)
+            locationId = locations.firstOrNull { it.id == remembered }?.id
+                ?: locations.firstOrNull()?.id.orEmpty()
+        }
+    }
+    // مقصد انتقال باید همیشه متمایز و زنده باشد؛ با عوض شدن مبدأ ریست می‌شود.
+    LaunchedEffect(locationId, locations) {
+        if (toLocationId == locationId || locations.none { it.id == toLocationId }) {
+            toLocationId = locations.firstOrNull { it.id != locationId }?.id.orEmpty()
+        }
+    }
+
     fun submit() {
         val product = selected
         if (product == null) {
             showMessage(Fa.movements.pickProduct)
+            return
+        }
+        if (locations.none { it.id == locationId }) {
+            showMessage(Fa.movements.pickLocation)
             return
         }
         // «اصلاح» تعدادِ «درست» می‌گیرد نه تعداد حرکت: تفاوتش با موجودی همین
@@ -166,6 +189,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                         ),
                     )
                     showMessage(Fa.movements.saved)
+                    LocationMemory.write(context, locationId)
                     onDone()
                 } catch (error: Throwable) {
                     showMessage(messageFor(error))
@@ -180,7 +204,12 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
             return
         }
         // انتقال بدون مقصد (یا با مقصدِ خودِ مبدأ) نباید حرکت بسازد.
-        if (action == Action.Transfer && (toLocationId.isBlank() || locationId == toLocationId)) {
+        if (action == Action.Transfer && (
+                toLocationId.isBlank() ||
+                    locationId == toLocationId ||
+                    locations.none { it.id == toLocationId }
+                )
+        ) {
             showMessage(Fa.movements.transferSame)
             return
         }
@@ -215,6 +244,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                     }
                 }
                 showMessage(Fa.movements.saved)
+                LocationMemory.write(context, locationId)
                 onDone()
             } catch (error: Throwable) {
                 showMessage(messageFor(error))

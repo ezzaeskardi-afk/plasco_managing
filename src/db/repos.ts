@@ -71,6 +71,12 @@ export async function setSettings(patch: Partial<Settings>, target: PlascoDb = d
   await target.settings.bulkPut(entries.map(([key, value]) => ({ key, value })));
 }
 
+/** Removes stored keys entirely; `setSettings` deliberately ignores undefined values. */
+export async function clearSettings(keys: readonly string[], target: PlascoDb = db): Promise<void> {
+  if (keys.length === 0) return;
+  await target.settings.bulkDelete([...keys]);
+}
+
 // ------------------------------------------------------- brands / categories
 
 export interface BrandDraft {

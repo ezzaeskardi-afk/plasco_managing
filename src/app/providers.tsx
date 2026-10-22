@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Toaster } from 'sonner';
 import { DEFAULT_SETTINGS } from '@/db/dexie';
 import { fa } from '@/i18n/fa';
-import { getSettings, setSettings } from '@/db/repos';
+import { clearSettings, getSettings, setSettings } from '@/db/repos';
 import type { Settings } from '@/db/types';
-import { hashPin, SettingsContext, type SettingsContextValue } from './settings-context';
+import { hashPin, SettingsContext, verifyPin, type SettingsContextValue } from './settings-context';
 
 function applyTheme(theme: Settings['theme']) {
   const prefersDark =
@@ -44,8 +44,7 @@ function SettingsProvider({ children }: { children: ReactNode }) {
 
   const unlock = useCallback(
     async (pin: string) => {
-      const hash = await hashPin(pin);
-      if (settings.costLockPinHash && hash === settings.costLockPinHash) {
+      if (await verifyPin(pin, settings.costLockPinHash)) {
         setUnlocked(true);
         return true;
       }
@@ -63,7 +62,8 @@ function SettingsProvider({ children }: { children: ReactNode }) {
   );
 
   const disableCostLock = useCallback(async () => {
-    await setSettings({ costLockEnabled: false, costLockPinHash: undefined });
+    await clearSettings(['costLockPinHash']);
+    await setSettings({ costLockEnabled: false });
     setUnlocked(false);
   }, []);
 

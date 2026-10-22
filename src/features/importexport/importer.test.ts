@@ -8,6 +8,7 @@ import {
   guessMap,
   prepareRows,
   type ColumnMap,
+  type PreparedRow,
 } from './importer';
 
 let db: PlascoDb;
@@ -106,6 +107,24 @@ describe('prepareRows', () => {
     const context = await buildContext(db);
     const prepared = prepareRows([{ نام: 'ظرف غذا', موجودی: '5' }], { name: 'نام', quantity: 'موجودی' }, context);
     expect(prepared[0]?.draft).toEqual({ name: 'ظرف غذا' });
+  });
+
+  it('rejects negative and non-numeric numbers instead of clamping them away', async () => {
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [
+        { نام: 'الف', خرید: '-۵۰۰۰', موجودی: '۳' },
+        { نام: 'ب', خرده: 'هزار' },
+        { نام: 'ج', موجودی: '-۲' },
+      ],
+      { name: 'نام', buy: 'خرید', retail: 'خرده', quantity: 'موجودی' },
+      context,
+    );
+
+    expect(prepared.map((row) => row.action)).toEqual(['error', 'error', 'error']);
+    expect(prepared[0]?.reason).toContain('منفی');
+    expect(prepared[1]?.reason).toContain('عدد نیست');
+    expect(prepared[2]?.reason).toContain('منفی');
   });
 });
 
@@ -231,6 +250,59 @@ describe('commitRows', () => {
     const brands = await db.brands.toArray();
     expect(brands.map((brand) => brand.name)).toEqual(['شرکت الف']);
     expect((await db.products.get(product.id))?.brandId).toBe(brands[0]?.id);
+  });
+
+  it('creates a new file brand once for every row that names it', async () => {
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [
+        { نام: 'سطل', برند: 'شرکت الف' },
+        { نام: 'سبد', برند: 'شرکت الف' },
+      ],
+      { name: 'نام', brand: 'برند' },
+      context,
+    );
+
+    const result = await commitRows(prepared, {}, db);
+    expect(result.created).toBe(2);
+    const brands = await db.brands.toArray();
+    expect(brands).toHaveLength(1);
+    const products = await db.products.toArray();
+    expect(products.map((product) => product.brandId)).toEqual([brands[0]?.id, brands[0]?.id]);
+  });
+
+  it('keeps the committed chunks undoable when a later chunk fails', async () => {
+    const context = await buildContext(db);
+    const prepared = prepareRows(
+      [{ نام: 'الف' }, { نام: 'ب' }],
+      { name: 'نام' },
+      context,
+    );
+    const broken = { rowNumber: 3, action: 'new' } as PreparedRow;
+    Object.defineProperty(broken, 'draft', {
+      get() {
+        throw new Error('simulated write failure');
+      },
+    });
+    const first = prepared[0];
+    if (!first) throw new Error('expected a first row');
+
+    await expect(commitRows([first, broken], { chunkSize: 1 }, db)).rejects.toThrow(
+      'simulated write failure',
+    );
+
+    const batches = await db.imports.toArray();
+    expect(batches).toHaveLength(1);
+    const batch = batches[0];
+    if (!batch) throw new Error('expected a partial batch');
+    expect(batch).toMatchObject({ created: 1, updated: 0 });
+    const entries = await db.importEntries.where('batchId').equals(batch.id).toArray();
+    expect(entries).toHaveLength(1);
+    expect((await db.products.toArray()).map((product) => product.name)).toEqual(['الف']);
+
+    await undoImportBatch(batch.id, db);
+    const afterUndo = await db.products.toArray();
+    expect(afterUndo[0]?.deletedAt).toBeTypeOf('number');
   });
 });
 

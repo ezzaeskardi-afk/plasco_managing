@@ -123,6 +123,19 @@ describe('applyStockTake', () => {
     expect(await levelOf(db, gone.id)).toBe(3);
   });
 
+  it('ignores a counted row whose product was deleted before apply', async () => {
+    const gone = await makeProduct(db, 'حذف‌شده', 10);
+    const sessionId = await openSession(db);
+    await countItem(db, sessionId, gone.id, 4);
+    await db.products.update(gone.id, { deletedAt: Date.now() });
+
+    const result = await applyStockTake(sessionId, {}, db);
+
+    expect(result.movements).toEqual([]);
+    expect(await levelOf(db, gone.id)).toBe(10);
+    expect((await db.stockTakes.get(sessionId))?.status).toBe('applied');
+  });
+
   it('refuses to run twice and refuses a cancelled session', async () => {
     const product = await makeProduct(db, 'ظرف', 10);
     const sessionId = await openSession(db);

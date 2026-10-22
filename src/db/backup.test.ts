@@ -52,7 +52,8 @@ describe('backup and restore', () => {
     expect(blob.size).toBeGreaterThan(0);
     expect(summary.products).toBe(1);
     expect(summary.movements).toBe(2);
-    expect((await db.settings.get('lastBackupAt'))?.value).toBeTypeOf('number');
+    // The caller marks the backup only after the file has actually been saved.
+    expect(await db.settings.get('lastBackupAt')).toBeUndefined();
 
     const { data } = await readBackup(blob);
     // The stamp follows the schema generation, not a frozen number.
@@ -150,6 +151,53 @@ describe('backup and restore', () => {
     } finally {
       await other.delete();
     }
+  });
+
+  it('does not let a skipped incoming row reserve a code', async () => {
+    const a = await createProduct({ name: 'الف', buyPrice: 1_000, retailPrice: 2_000 }, db);
+    const b = await createProduct({ name: 'ب', buyPrice: 1_000, retailPrice: 2_000 }, db);
+    const aRow = await db.products.get(a.id);
+    if (!aRow) throw new Error('expected the seeded product');
+
+    // A stale copy of A whose code now belongs to B; it must be skipped, and
+    // the fresh row C must keep its own free P-00003.
+    const staleA = { ...aRow, code: b.code, updatedAt: 1 };
+    const incomingC = {
+      ...aRow,
+      id: 'incoming-c',
+      code: 'P-00003',
+      name: 'سطل تازه',
+      nameN: 'سطل تازه',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const data = {
+      schemaVersion: SCHEMA_VERSION,
+      exportedAt: Date.now(),
+      tables: {
+        brands: [],
+        categories: [],
+        locations: [],
+        products: [staleA, incomingC],
+        stockLevels: [],
+        movements: [],
+        priceChanges: [],
+        stockTakes: [],
+        stockTakeItems: [],
+        settings: [],
+      },
+    };
+    const blob = new Blob([
+      zipSync({ 'data.json': strToU8(JSON.stringify(data)) }) as unknown as BlobPart,
+    ]);
+
+    const result = await restoreBackup(blob, 'merge', db);
+
+    expect(result.renumbered).toBe(0);
+    expect((await db.products.get('incoming-c'))?.code).toBe('P-00003');
+    expect((await db.products.get(a.id))?.code).toBe('P-00001');
+    expect((await db.products.get(b.id))?.code).toBe('P-00002');
+    expect((await db.settings.get('nextProductNo'))?.value).toBe(3);
   });
 
   it('merge keeps the shelf label from the file on a bin-less level', async () => {

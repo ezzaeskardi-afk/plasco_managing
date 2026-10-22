@@ -4,6 +4,7 @@ import {
   DuplicateCodeError,
   ProductCodeExhaustedError,
   countProducts,
+  clearSettings,
   createBrand,
   createLocation,
   createProduct,
@@ -89,6 +90,13 @@ describe('schema and defaults', () => {
     await setSettings({ shopName: 'پلاسکو ۳' }, db);
     await setSettings({ shopName: undefined }, db);
     expect((await getSettings(db)).shopName).toBe('پلاسکو ۳');
+  });
+
+  it('removes a stored key when asked, instead of keeping an undefined patch', async () => {
+    await setSettings({ costLockPinHash: 'hash' }, db);
+    await clearSettings(['costLockPinHash'], db);
+    expect((await getSettings(db)).costLockPinHash).toBeUndefined();
+    expect(await db.settings.get('costLockPinHash')).toBeUndefined();
   });
 });
 

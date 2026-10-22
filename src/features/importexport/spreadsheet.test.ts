@@ -1,7 +1,7 @@
 import * as ExcelJS from 'exceljs';
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { buildWorkbook } from './spreadsheet';
+import { buildWorkbook, readTableFile } from './spreadsheet';
 
 function readBlob(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
@@ -10,6 +10,13 @@ function readBlob(blob: Blob): Promise<ArrayBuffer> {
     reader.onerror = () => reject(reader.error);
     reader.readAsArrayBuffer(blob);
   });
+}
+
+/** jsdom's File has no arrayBuffer(); give it the same bytes exceljs would receive. */
+function fileFromBlob(blob: Blob, name: string): File {
+  const file = new File([blob], name, { type: blob.type });
+  Object.defineProperty(file, 'arrayBuffer', { value: () => readBlob(blob) });
+  return file;
 }
 
 async function loadWorkbook(blob: Blob): Promise<ExcelJS.Workbook> {
@@ -74,5 +81,46 @@ describe('buildWorkbook', () => {
     expect(sheet?.getCell('A1').fill).toMatchObject({ fgColor: { argb: 'FF0B7285' } });
     const zip = unzipSync(new Uint8Array(await readBlob(blob)));
     expect(zip['xl/tables/table1.xml']).toBeUndefined();
+  });
+});
+
+describe('readTableFile', () => {
+  it('round-trips the titled workbook the app exports', async () => {
+    const header = ['کد', 'نام', 'قیمت خرید', 'موجودی'];
+    const blob = await buildWorkbook([
+      {
+        name: 'کالاها',
+        title: 'کالاها — پلاسکو منیجینگ — ۱۴۰۵/۷/۲۸',
+        header,
+        rows: [
+          ['P-00001', 'ظرف غذای بزرگ', '125000', '12'],
+          ['P-00002', 'سبد لباس', '0', '0'],
+        ],
+      },
+    ]);
+
+    const table = await readTableFile(fileFromBlob(blob, 'کالاها.xlsx'));
+    expect(table.headers).toEqual(header);
+    expect(table.rows).toHaveLength(2);
+    expect(table.rows[0]).toEqual({
+      کد: 'P-00001',
+      نام: 'ظرف غذای بزرگ',
+      'قیمت خرید': '125000',
+      موجودی: '12',
+    });
+  });
+
+  it('skips a merged title and de-duplicates repeated headers', async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('گزارش');
+    sheet.mergeCells(1, 1, 1, 3);
+    sheet.getCell(1, 1).value = 'گزارش کالاها';
+    sheet.getRow(2).values = ['نام', 'نام', 'کد'];
+    sheet.getRow(3).values = ['ظرف', 'سبد', 'P-1'];
+    const blob = new Blob([(await workbook.xlsx.writeBuffer()) as unknown as BlobPart]);
+
+    const table = await readTableFile(fileFromBlob(blob, 'گزارش.xlsx'));
+    expect(table.headers).toEqual(['نام', 'نام ۲', 'کد']);
+    expect(table.rows).toEqual([{ نام: 'ظرف', 'نام ۲': 'سبد', کد: 'P-1' }]);
   });
 });

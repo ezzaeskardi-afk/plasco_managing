@@ -133,6 +133,7 @@ class UnitsTest {
         assertEquals(5, cartonPieces(0, 24, 5))
         assertEquals(0, cartonPieces(2, 0, 0))
         assertEquals(0, cartonPieces(-2, 24, -3))
+        assertEquals(MAX_QTY, cartonPieces(Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE))
     }
 }
 

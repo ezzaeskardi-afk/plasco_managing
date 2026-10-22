@@ -3,7 +3,7 @@ package ir.plasco.managing.data
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import ir.plasco.managing.model.ID
-import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -41,9 +41,9 @@ internal object BackupPhotos {
      * چند عکس داخل فایل هست (برای پیش‌نمایش پیش از بازیابی). این یکی فقط تخمین است:
      * اگر فایل خوانده نشد صفر می‌گوید و اعتبارسنجی واقعی سر جایش می‌ماند.
      */
-    fun count(bytes: ByteArray): Int = runCatching {
+    fun count(input: InputStream): Int = runCatching {
         val ids = HashSet<ID>()
-        walk(bytes) { productId, kind, data -> if (kind == THUMB && data.isNotEmpty()) ids.add(productId) }
+        walk(input) { productId, kind, data -> if (kind == THUMB && data.isNotEmpty()) ids.add(productId) }
         ids.size
     }.getOrDefault(0)
 
@@ -55,13 +55,13 @@ internal object BackupPhotos {
      * (`existing.updatedAt > data.exportedAt`). زمانِ عکس‌های آمده از فایل، همان
      * `exportedAt` فایل است، چون فایل زمان دیگری برای عکس‌ها ندارد.
      */
-    fun restore(bytes: ByteArray, exportedAt: Long, mode: RestoreMode, db: SQLiteDatabase): Int {
+    fun restore(input: InputStream, exportedAt: Long, mode: RestoreMode, db: SQLiteDatabase): Int {
         if (mode == RestoreMode.Replace) db.delete("photos", null, null)
         var written = 0
         // عکس یک کالا دو عضو ZIP دارد؛ تا آمدن هر دو صبر می‌کنیم. فایل‌های خودمان
         // هر دو را پشت‌سرهم می‌نویسند، پس این نگاشت در عمل یک عضو دارد.
         val pending = HashMap<ID, MutableMap<String, ByteArray>>()
-        walk(bytes) { productId, kind, data ->
+        walk(input) { productId, kind, data ->
             val slot = pending.getOrPut(productId) { HashMap() }
             slot[kind] = data
             val thumb = slot[THUMB]
@@ -113,8 +113,8 @@ internal object BackupPhotos {
      * روی اعضای عکسِ فایل می‌گردد. خطا عمداً خورده نمی‌شود: اگر حین بازیابی فایل
      * نیمه‌کاره بماند، خودِ تراکنش برمی‌گردد (رفتار «همه یا هیچ»).
      */
-    private fun walk(bytes: ByteArray, onEntry: (ID, String, ByteArray) -> Unit) {
-        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+    private fun walk(input: InputStream, onEntry: (ID, String, ByteArray) -> Unit) {
+        ZipInputStream(input).use { zip ->
             var entry: ZipEntry? = zip.nextEntry
             while (entry != null) {
                 val name = entry.name

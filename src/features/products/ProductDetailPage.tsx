@@ -30,7 +30,7 @@ import { listPriceChanges } from '@/db/priceHistory';
 import type { Product, PriceChange } from '@/db/types';
 import { displayProductName, formatJalali, formatMoney, formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
-import { toastUndo } from '@/lib/toast';
+import { toastSuccess, toastUndo } from '@/lib/toast';
 import { useSettings } from '@/app/settings-context';
 import { PriceEditSheet } from './PriceEditSheet';
 import { ProductThumb } from './ProductThumb';
@@ -63,6 +63,31 @@ export function ProductDetailPage() {
   const { costVisible } = useSettings();
 
   if (!product) return <p className="text-crate">{fa.common.loading}</p>;
+
+  if (product.deletedAt != null) {
+    return (
+      <div className="mx-auto max-w-[860px]">
+        <EmptyState
+          icon={<Trash2 className="size-6 text-out" />}
+          message={fa.products.deletedNotice}
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button
+                onClick={() => {
+                  void restoreProduct(product.id).then(() => toastSuccess(fa.products.restored));
+                }}
+              >
+                {fa.products.restoreAction}
+              </Button>
+              <Button variant="secondary" onClick={() => navigate('/products')}>
+                {fa.products.title}
+              </Button>
+            </div>
+          }
+        />
+      </div>
+    );
+  }
 
   const myLevels = (levels ?? []).filter((level) => level.productId === product.id);
   const total = myLevels.reduce((sum, level) => sum + level.qty, 0);

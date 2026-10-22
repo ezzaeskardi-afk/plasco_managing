@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PlascoDb } from '@/db/dexie';
-import { findSavedMapping, rememberMapping, toColumnMap } from './mappingMemory';
+import { findSavedMapping, reconcileColumnMap, rememberMapping, toColumnMap } from './mappingMemory';
 
 let db: PlascoDb;
 let dbIndex = 0;
@@ -70,5 +70,14 @@ describe('mapping memory', () => {
 
   it('returns nothing for an unknown header row', async () => {
     expect(await findSavedMapping(['هیچ', 'چیز'], db)).toBeUndefined();
+  });
+
+  it('points a remembered mapping at the current spelling of each header', () => {
+    const map = { name: 'Product Name', retail: 'RETAIL PRICE', code: 'CODE' };
+    expect(reconcileColumnMap(map, ['RETAIL price', 'PRODUCT NAME', 'code'])).toEqual({
+      name: 'PRODUCT NAME',
+      retail: 'RETAIL price',
+      code: 'code',
+    });
   });
 });

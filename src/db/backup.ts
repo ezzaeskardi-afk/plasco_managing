@@ -216,7 +216,6 @@ export async function createBackup(target: PlascoDb = db): Promise<{ blob: Blob;
 
   const zipped = zipSync(files, { level: 6 });
   const blob = new Blob([zipped as unknown as BlobPart], { type: 'application/zip' });
-  await setSettings({ lastBackupAt: Date.now() }, target);
 
   return {
     blob,
@@ -322,6 +321,11 @@ async function mergeProductsRenumbering(
   let renumbered = 0;
 
   for (const row of incoming) {
+    const existing = await target.products.get(row.id);
+    // Decide the skip before touching the code map: a row this device already
+    // has newer must not reserve a code or advance the sequence.
+    if (existing && existing.updatedAt >= row.updatedAt) continue;
+
     const clash = byCode.get(row.code);
     let code = row.code;
     if (clash && clash !== row.id) {
@@ -332,16 +336,14 @@ async function mergeProductsRenumbering(
       nextNo += 1;
       renumbered += 1;
     }
+    if (existing && existing.code !== code) byCode.delete(existing.code);
     byCode.set(code, row.id);
 
-    const existing = await target.products.get(row.id);
     if (!existing) {
       await target.products.add({ ...row, code });
       continue;
     }
-    if (row.updatedAt > existing.updatedAt) {
-      await target.products.put({ ...row, code: code === existing.code ? existing.code : code });
-    }
+    await target.products.put({ ...row, code });
   }
 
   if (renumbered > 0) await setSettings({ nextProductNo: nextNo }, target);

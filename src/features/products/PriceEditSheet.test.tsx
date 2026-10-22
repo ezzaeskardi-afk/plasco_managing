@@ -1,10 +1,14 @@
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsContext, type SettingsContextValue } from '@/app/settings-context';
 import { DEFAULT_SETTINGS } from '@/db/dexie';
 import type { Product } from '@/db/types';
 import { fa } from '@/i18n/fa';
 import { PriceEditSheet } from './PriceEditSheet';
+
+const { updateProduct } = vi.hoisted(() => ({ updateProduct: vi.fn() }));
+vi.mock('@/db/repos', () => ({ updateProduct }));
+vi.mock('@/lib/toast', () => ({ toastError: vi.fn(), toastUndo: vi.fn() }));
 
 const product: Product = {
   id: 'p-1',
@@ -42,6 +46,10 @@ function renderSheet(costVisible: boolean) {
 describe('PriceEditSheet', () => {
   afterEach(cleanup);
 
+  beforeEach(() => {
+    updateProduct.mockClear();
+  });
+
   it('hides the buy-price field while the cost lock is on', () => {
     renderSheet(false);
     expect(screen.queryByLabelText(fa.products.buyPrice)).toBeNull();
@@ -54,5 +62,14 @@ describe('PriceEditSheet', () => {
     expect(screen.getByLabelText(fa.products.buyPrice)).toBeTruthy();
     expect(screen.getByLabelText(fa.products.retailPrice)).toBeTruthy();
     expect(screen.getByLabelText(fa.products.wholesalePrice)).toBeTruthy();
+  });
+
+  it('refuses an unparseable wholesale price instead of clearing it', () => {
+    renderSheet(true);
+    fireEvent.change(screen.getByLabelText(fa.products.wholesalePrice), {
+      target: { value: '۱۲ هزار' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: fa.actions.save }));
+    expect(updateProduct).not.toHaveBeenCalled();
   });
 });

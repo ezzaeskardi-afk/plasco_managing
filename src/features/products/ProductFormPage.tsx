@@ -87,7 +87,7 @@ function toDraft(values: FormValues) {
     brandId: values.brandId || undefined,
     categoryId: values.categoryId || undefined,
     code: values.code || undefined,
-    barcodes: values.barcodes.split('\n').map((b) => b.trim()).filter(Boolean),
+    barcodes: parseBarcodeList(values.barcodes),
     packLabel: values.packLabel || DEFAULT_PACK_LABEL,
     packSize: Math.max(1, int(values.packSize) ?? 1),
     buyPrice: int(values.buyPrice) ?? 0,
@@ -201,9 +201,16 @@ export function ProductFormPage() {
   useEffect(() => {
     if (!id) return;
     void getProduct(id).then((product) => {
-      if (product) reset(fromProduct(product));
+      if (!product) return;
+      if (product.deletedAt != null) {
+        // A deleted row must not stay editable through an old bookmark; the
+        // detail page explains the state and offers restore.
+        navigate(`/products/${id}`, { replace: true });
+        return;
+      }
+      reset(fromProduct(product));
     });
-  }, [id, reset]);
+  }, [id, navigate, reset]);
 
   const submit = async (values: FormValues, andNext: boolean) => {
     setSaving(true);

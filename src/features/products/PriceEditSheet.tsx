@@ -31,18 +31,20 @@ export function PriceEditSheet({ product, onClose }: { product: Product; onClose
   const save = async () => {
     const nextBuy = parseIntegerInput(buy);
     const nextRetail = parseIntegerInput(retail);
-    const nextWholesale =
-      (wholesale.trim() === '' ? undefined : parseIntegerInput(wholesale)) ?? undefined;
+    const wholesaleText = wholesale.trim();
+    const nextWholesale = wholesaleText === '' ? undefined : parseIntegerInput(wholesale);
     const invalid =
       nextBuy == null ||
       nextRetail == null ||
       nextBuy < 0 ||
       nextRetail < 0 ||
+      (wholesaleText !== '' && nextWholesale == null) ||
       (nextWholesale != null && nextWholesale < 0);
     if (invalid) {
-      toastError(fa.stock.enterQty);
+      toastError(fa.products.priceInvalid);
       return;
     }
+    const wholesalePrice = nextWholesale ?? undefined;
 
     setSaving(true);
     try {
@@ -53,7 +55,7 @@ export function PriceEditSheet({ product, onClose }: { product: Product; onClose
       };
       await updateProduct(
         product.id,
-        { buyPrice: nextBuy, retailPrice: nextRetail, wholesalePrice: nextWholesale },
+        { buyPrice: nextBuy, retailPrice: nextRetail, wholesalePrice },
         { reason: fa.products.priceReasonQuick },
       );
       toastUndo(fa.products.pricesSaved, () =>

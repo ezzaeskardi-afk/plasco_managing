@@ -27,6 +27,12 @@ import { suggestImportUndoRemainder } from '@/features/importexport/undoImport';
 
 type Op = 'receive' | 'issue' | 'damage' | 'transfer' | 'adjust';
 
+const OPS: readonly Op[] = ['receive', 'issue', 'damage', 'transfer', 'adjust'];
+
+function isOp(value: string | undefined): value is Op {
+  return value != null && (OPS as readonly string[]).includes(value);
+}
+
 const OP_TITLES: Record<Op, string> = {
   receive: fa.stock.receive,
   issue: fa.stock.issue,
@@ -55,7 +61,7 @@ const LAST_LOCATION_KEY = 'plasco:last-location';
 
 export function StockOpPage() {
   const { op: opParam } = useParams<{ op: string }>();
-  const op = (opParam ?? 'receive') as Op;
+  const op = opParam == null ? 'receive' : isOp(opParam) ? opParam : null;
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const presetProductId = params.get('product') ?? '';
@@ -135,6 +141,19 @@ export function StockOpPage() {
   }, [product?.id]);
 
   if (!products || !locations) return <p className="text-crate">{fa.common.loading}</p>;
+
+  if (!op) {
+    return (
+      <EmptyState
+        message={fa.stock.opNotFound}
+        action={
+          <Button variant="secondary" onClick={() => navigate(-1)}>
+            {fa.actions.back}
+          </Button>
+        }
+      />
+    );
+  }
 
   // Stock coming in can unblock an import that a previous undo had to leave half
   // done; the shopkeeper gets the offer in the same breath as the movement.

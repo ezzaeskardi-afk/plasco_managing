@@ -37,15 +37,12 @@ import ir.plasco.managing.ui.components.ScreenHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private data class PendingRestore(val bytes: ByteArray, val info: RestoreSummary) {
-    // ByteArray در data class باید دستی مقایسه شود تا هشدار هم‌ارزی ندهد.
-    override fun equals(other: Any?): Boolean = this === other
-    override fun hashCode(): Int = bytes.contentHashCode()
-}
+private data class PendingRestore(val file: File, val info: RestoreSummary)
 
 @Composable
 fun DataScreen(onBack: () -> Unit) {
@@ -69,12 +66,13 @@ fun DataScreen(onBack: () -> Unit) {
         busy = true
         scope.launch {
             try {
-                val (bytes, summary) = container.backup.createBackup()
-                withContext(Dispatchers.IO) {
+                val summary = withContext(Dispatchers.IO) {
                     val stream = context.contentResolver.openOutputStream(uri)
                         ?: throw IllegalStateException(Fa.backup.fileFailed)
-                    stream.use { it.write(bytes) }
+                    stream.use { container.backup.writeBackup(it) }
                 }
+                // فقط وقتی فایل واقعاً بسته شد، تاریخ بکاپ تازه می‌شود.
+                container.settings.update { it.copy(lastBackupAt = System.currentTimeMillis()) }
                 lastResult = "${Fa.backup.created} — ${formatNumber(summary.products)} کالا، " +
                     "${formatNumber(summary.photos)} عکس، ${formatNumber(summary.movements)} حرکت، " +
                     "${formatNumber(summary.bytes / 1024)} کیلوبایت"
@@ -93,14 +91,26 @@ fun DataScreen(onBack: () -> Unit) {
         if (uri == null) return@rememberLauncherForActivityResult
         busy = true
         scope.launch {
+            var temp: File? = null
             try {
-                val bytes = withContext(Dispatchers.IO) {
-                    val stream = context.contentResolver.openInputStream(uri)
-                        ?: throw IllegalStateException(Fa.backup.fileFailed)
-                    stream.use { it.readBytes() }
+                // SAF تنها یک‌بار قابل خواندن است؛ برای دو پاس (JSON و عکس‌ها)
+                // یک کپی موقت در حافظهٔ کش می‌سازیم، نه در RAM.
+                val copied = withContext(Dispatchers.IO) {
+                    val file = File.createTempFile("plasco-restore-", ".zip", context.cacheDir)
+                    try {
+                        val stream = context.contentResolver.openInputStream(uri)
+                            ?: throw IllegalStateException(Fa.backup.fileFailed)
+                        stream.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+                        file
+                    } catch (error: Throwable) {
+                        file.delete()
+                        throw error
+                    }
                 }
-                pending = PendingRestore(bytes, container.backup.inspect(bytes))
+                temp = copied
+                pending = PendingRestore(copied, container.backup.inspect(copied))
             } catch (error: Throwable) {
+                temp?.delete()
                 showMessage(restoreErrorText(error))
             } finally {
                 busy = false
@@ -115,7 +125,7 @@ fun DataScreen(onBack: () -> Unit) {
             busy = true
             scope.launch {
                 try {
-                    val result = container.backup.restore(file.bytes, mode)
+                    val result = container.backup.restore(file.file, mode)
                     val base = if (mode == RestoreMode.Replace) Fa.backup.restored else Fa.backup.restoredMerge
                     lastResult = "$base — ${formatNumber(result.products)} کالا، " +
                         "${formatNumber(result.photos)} عکس، ${formatNumber(result.movements)} حرکت" +
@@ -128,6 +138,7 @@ fun DataScreen(onBack: () -> Unit) {
                 } catch (error: Throwable) {
                     showMessage(restoreErrorText(error))
                 } finally {
+                    file.file.delete()
                     busy = false
                 }
             }
@@ -186,7 +197,10 @@ fun DataScreen(onBack: () -> Unit) {
     val file = pending
     if (file != null) {
         AlertDialog(
-            onDismissRequest = { pending = null },
+            onDismissRequest = {
+                pending?.file?.delete()
+                pending = null
+            },
             title = { Text(Fa.backup.restoreTitle) },
             text = {
                 Text(

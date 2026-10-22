@@ -1,5 +1,6 @@
 import type * as ExcelJS from 'exceljs';
 import Papa from 'papaparse';
+import { formatNumber } from '@/domain/format';
 
 export type Row = Record<string, string>;
 
@@ -32,6 +33,45 @@ export interface ParsedTable {
   rows: Row[];
 }
 
+interface HeaderRow {
+  rowNumber: number;
+  headers: string[];
+}
+
+/**
+ * Our own export puts a merged title above the real header. A merged title
+ * repeats one text across columns, so the first row with at least two distinct
+ * texts is the header; a plain un-titled sheet still starts at row 1.
+ */
+function findHeaderRow(sheet: ExcelJS.Worksheet): HeaderRow {
+  const lastCandidate = Math.min(5, sheet.rowCount);
+  let chosen = 1;
+
+  for (let rowNumber = 1; rowNumber <= lastCandidate; rowNumber += 1) {
+    const texts: string[] = [];
+    sheet.getRow(rowNumber).eachCell({ includeEmpty: false }, (cell) => {
+      const text = cell.text.trim();
+      if (text) texts.push(text);
+    });
+    if (new Set(texts).size >= 2) {
+      chosen = rowNumber;
+      break;
+    }
+  }
+
+  const headers: string[] = [];
+  const counts = new Map<string, number>();
+  sheet.getRow(chosen).eachCell({ includeEmpty: false }, (cell, col) => {
+    const text = cell.text.trim();
+    if (!text) return;
+    const count = (counts.get(text) ?? 0) + 1;
+    counts.set(text, count);
+    headers[col - 1] = count === 1 ? text : `${text} ${formatNumber(count)}`;
+  });
+
+  return { rowNumber: chosen, headers };
+}
+
 /** Reads .csv with papaparse and .xlsx/.xlsm with exceljs (legacy .xls is not supported). */
 export async function readTableFile(file: File): Promise<ParsedTable> {
   if (/\.csv$/i.test(file.name)) {
@@ -56,14 +96,12 @@ export async function readTableFile(file: File): Promise<ParsedTable> {
   const sheet = workbook.worksheets[0];
   if (!sheet) throw new FileUnreadableError();
 
-  const headers: string[] = [];
-  sheet.getRow(1).eachCell((cell, col) => {
-    headers[col - 1] = cell.text.trim();
-  });
+  const { rowNumber: headerRow, headers } = findHeaderRow(sheet);
+  if (headers.length === 0) throw new FileUnreadableError();
 
   const rows: Row[] = [];
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
+    if (rowNumber <= headerRow) return;
     const record: Row = {};
     let hasValue = false;
     row.eachCell((cell, col) => {

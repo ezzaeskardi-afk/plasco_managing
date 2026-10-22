@@ -25,6 +25,13 @@ export function useSettings(): SettingsContextValue {
  * `crypto.subtle` is unavailable outside secure contexts, and the app may be
  * opened over plain HTTP on the shop network, so fall back to a small hash.
  */
+export function fallbackPinHash(pin: string): string {
+  const input = `plasco-pin:${pin}`;
+  let hash = 5381;
+  for (let i = 0; i < input.length; i++) hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
+  return `fallback-${(hash >>> 0).toString(16)}`;
+}
+
 export async function hashPin(pin: string): Promise<string> {
   const input = `plasco-pin:${pin}`;
   const subtle = globalThis.crypto?.subtle as SubtleCrypto | undefined;
@@ -34,7 +41,16 @@ export async function hashPin(pin: string): Promise<string> {
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
   }
-  let hash = 5381;
-  for (let i = 0; i < input.length; i++) hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0;
-  return `fallback-${(hash >>> 0).toString(16)}`;
+  return fallbackPinHash(pin);
+}
+
+/**
+ * A PIN saved in a secure context (SHA-256) must still open after the same
+ * device starts serving over plain HTTP (DJB2), and vice versa. Checking both
+ * shapes avoids a lockout that no PIN can fix.
+ */
+export async function verifyPin(pin: string, storedHash: string | undefined): Promise<boolean> {
+  if (!storedHash) return false;
+  if (fallbackPinHash(pin) === storedHash) return true;
+  return (await hashPin(pin)) === storedHash;
 }

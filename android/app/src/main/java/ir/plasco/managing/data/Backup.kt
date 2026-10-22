@@ -6,8 +6,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
+import java.io.BufferedInputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.FilterOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -173,16 +177,15 @@ private const val BARCODE_SEPARATOR = "\n"
 class BackupRepo(
     private val helper: PlascoDb,
     private val hub: DataHub,
-    private val settings: SettingsRepo,
     private val stock: StockRepo,
 ) {
 
     /**
-     * ZIP سازگار با نسخهٔ وب. تاریخ آخرین بکاپ هم به‌روز می‌شود.
-     * خواندن همهٔ جدول‌ها و نوشتن ZIP روی رشتهٔ IO انجام می‌شود؛ روی ترد اصلی
-     * با هزاران ردیف و عکس، فریز و ANR می‌داد.
+     * ZIP سازگار با نسخهٔ وب را مستقیم روی خروجی SAF می‌نویسد. `lastBackupAt`
+     * این‌جا ست نمی‌شود: تنها بعد از بسته‌شدن موفق فایل، خود صفحهٔ داده آن را
+     * علامت می‌زند — بکاپِ نیمه‌کاره نباید «آخرین بکاپ» را تازه نشان دهد.
      */
-    suspend fun createBackup(): Pair<ByteArray, BackupSummary> = withContext(Dispatchers.IO) {
+    suspend fun writeBackup(out: OutputStream): BackupSummary = withContext(Dispatchers.IO) {
         val db = helper.readableDatabase
         val root = JSONObject()
         root.put("schemaVersion", BACKUP_SCHEMA_VERSION)
@@ -200,24 +203,22 @@ class BackupRepo(
         root.put("tables", tables)
 
         var photos = 0
-        val out = ByteArrayOutputStream()
-        ZipOutputStream(out).use { zip ->
+        val counted = CountingOutputStream(out)
+        ZipOutputStream(counted).use { zip ->
             zip.putNextEntry(ZipEntry("data.json"))
             zip.write(root.toString().toByteArray(Charsets.UTF_8))
             zip.closeEntry()
             photos = BackupPhotos.write(zip, db)
         }
-        val bytes = out.toByteArray()
-        settings.update { it.copy(lastBackupAt = System.currentTimeMillis()) }
-        bytes to BackupSummary(products, movements, photos, bytes.size)
+        BackupSummary(products, movements, photos, counted.count.toInt())
     }
 
     /**
      * بازیابی. قبل از هر کاری همهٔ ساختار فایل بررسی می‌شود؛ اگر ناقص باشد
      * هیچ چیزی عوض نمی‌شود (خطای BackupInvalidException با علت خوانا).
      */
-    suspend fun restore(bytes: ByteArray, mode: RestoreMode): RestoreSummary = withContext(Dispatchers.IO) {
-        val parsed = parseBackup(bytes)
+    suspend fun restore(file: File, mode: RestoreMode): RestoreSummary = withContext(Dispatchers.IO) {
+        val parsed = FileInputStream(file).use { parseBackup(it) }
         val data = parsed.tables
         var products = 0
         var movements = 0
@@ -259,7 +260,10 @@ class BackupRepo(
             }
             writeSettings(db, data.optJSONArray("settings"), mode)
             // عکس‌ها هم داخل همان تراکنش می‌نشینند: یا همه می‌آیند یا هیچ‌کدام.
-            photos = BackupPhotos.restore(bytes, parsed.exportedAt, mode, db)
+            // پاس دوم روی همان فایل (نه روی حافظه) تا بکاپ چند صد مگابایتی هم جا شود.
+            photos = FileInputStream(file).use {
+                BackupPhotos.restore(it, parsed.exportedAt, mode, db)
+            }
             // موجودی‌ها همیشه از روی حرکات بازسازی می‌شوند (قفسه‌ها حفظ).
             stock.rebuildLevelsInTransaction(db)
             if (renumbered > 0) {
@@ -274,21 +278,21 @@ class BackupRepo(
     }
 
     /** فایل را می‌خواند و فقط ساختار را بررسی می‌کند (برای پیش‌نمایش). */
-    suspend fun inspect(bytes: ByteArray): RestoreSummary = withContext(Dispatchers.IO) {
-        val data = parseBackup(bytes).tables
+    suspend fun inspect(file: File): RestoreSummary = withContext(Dispatchers.IO) {
+        val data = FileInputStream(file).use { parseBackup(it) }.tables
         RestoreSummary(
             mode = RestoreMode.Merge,
             products = data.optJSONArray("products")?.length() ?: 0,
             movements = data.optJSONArray("movements")?.length() ?: 0,
-            photos = BackupPhotos.count(bytes),
+            photos = FileInputStream(file).use { BackupPhotos.count(it) },
             renumbered = 0,
         )
     }
 
     // --- خواندن و نوشتن ---
 
-    private fun parseBackup(bytes: ByteArray): ParsedBackup {
-        val json = readDataJson(bytes)
+    private fun parseBackup(input: InputStream): ParsedBackup {
+        val json = readDataJson(input)
         val parsed = try {
             JSONObject(json)
         } catch (error: Throwable) {
@@ -303,12 +307,15 @@ class BackupRepo(
         return ParsedBackup(tables, parsed.optLong("exportedAt", 0L))
     }
 
-    private fun readDataJson(bytes: ByteArray): String {
+    private fun readDataJson(input: InputStream): String {
+        val buffered = if (input is BufferedInputStream) input else BufferedInputStream(input)
         // اگر خودِ فایل JSON خالص بود (مثل خروجی دستی) هم قبول می‌کنیم.
-        val head = String(bytes, 0, minOf(bytes.size, 1), Charsets.UTF_8)
-        if (head == "{") return String(bytes, Charsets.UTF_8)
+        buffered.mark(1)
+        val first = buffered.read()
+        buffered.reset()
+        if (first == '{'.code) return buffered.readBytes().toString(Charsets.UTF_8)
         try {
-            ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+            ZipInputStream(buffered).use { zip ->
                 var entry: ZipEntry? = zip.nextEntry
                 while (entry != null) {
                     if (entry.name == "data.json") {
@@ -498,4 +505,20 @@ class BackupRepo(
             it.moveToFirst()
         }
 
+}
+
+/** شمارش بایت‌های نوشته‌شده برای خلاصهٔ بکاپ، بدون نگه‌داشتن فایل در حافظه. */
+private class CountingOutputStream(delegate: OutputStream) : FilterOutputStream(delegate) {
+    var count = 0L
+        private set
+
+    override fun write(b: Int) {
+        out.write(b)
+        count += 1
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        out.write(b, off, len)
+        count += len
+    }
 }

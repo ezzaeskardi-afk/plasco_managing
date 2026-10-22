@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/input';
 import { Select } from '@/components/ui/misc';
 import { createBackup, restoreBackup, BackupInvalidError } from '@/db/backup';
 import { listImportBatches } from '@/db/imports';
-import { listBrands, listCategories, listLocations, listProducts, listStockLevels } from '@/db/repos';
+import { listBrands, listCategories, listDeletedProducts, listLocations, listProducts, listStockLevels } from '@/db/repos';
 import { readPersistState, requestPersist, type PersistState } from '@/app/persistStorage';
 import { formatJalali, formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
@@ -48,8 +48,9 @@ export function DataPage() {
   const exportData = async (kind: 'xlsx' | 'csv') => {
     setBusy(true);
     try {
-      const [products, levels, locations, brands, categories] = await Promise.all([
+      const [products, deletedProducts, levels, locations, brands, categories] = await Promise.all([
         listProducts(),
+        listDeletedProducts(),
         listStockLevels(),
         listLocations(),
         listBrands(),
@@ -96,7 +97,11 @@ export function DataPage() {
       ]);
 
       const levelHeader = ['کد کالا', 'نام کالا', 'مکان', 'قفسه', 'موجودی'];
-      const productMap = new Map(products.map((p) => [p.id, p]));
+      // Deleted products can still hold a level; the level sheet must name them
+      // instead of printing blank code/name rows.
+      const productMap = new Map(
+        [...products, ...deletedProducts].map((product) => [product.id, product]),
+      );
       const levelRows = levels
         .filter((level) => level.qty !== 0)
         .map((level) => [
@@ -154,6 +159,7 @@ export function DataPage() {
   };
 
   const restore = async (file: File) => {
+    if (busy) return;
     if (mode === 'replace' && !window.confirm(fa.importexport.replaceConfirm)) return;
     setBusy(true);
     try {
@@ -292,7 +298,11 @@ export function DataPage() {
             }}
           />
           <Button asChild variant="secondary" className="mt-3" disabled={busy}>
-            <label htmlFor="restore-file" className="cursor-pointer">
+            <label
+              htmlFor="restore-file"
+              aria-disabled={busy}
+              className={busy ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+            >
               <Upload className="size-5" />
               {fa.importexport.restore}
             </label>

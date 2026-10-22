@@ -11,7 +11,7 @@ import { formatQty } from '@/domain/format';
 import { fa } from '@/i18n/fa';
 import { toastError, toastSuccess } from '@/lib/toast';
 import { ImportReview, type ImportSummary } from './ImportReview';
-import { findSavedMapping, rememberMapping, toColumnMap } from './mappingMemory';
+import { findSavedMapping, reconcileColumnMap, rememberMapping, toColumnMap } from './mappingMemory';
 import {
   IMPORT_FIELDS,
   FIELD_LABELS,
@@ -55,6 +55,7 @@ export function ImportWizard() {
   }, [prepared]);
 
   const pickFile = async (file: File) => {
+    if (busy) return;
     setBusy(true);
     setFileName(file.name);
     try {
@@ -66,7 +67,9 @@ export function ImportWizard() {
       ]);
       const locationId = locations[0]?.id ?? '';
       // A company list comes back with the same header row: reuse its mapping and mode.
-      const nextMap = saved ? toColumnMap(saved.map) : guessMap(parsed.headers);
+      const nextMap = saved
+        ? reconcileColumnMap(toColumnMap(saved.map), parsed.headers)
+        : guessMap(parsed.headers);
       const nextMode: ImportMode = saved?.mode ?? 'full';
 
       setHeaders(parsed.headers);
@@ -177,7 +180,11 @@ export function ImportWizard() {
             }}
           />
           <Button asChild disabled={busy}>
-            <label htmlFor="import-file" className="cursor-pointer">
+            <label
+              htmlFor="import-file"
+              aria-disabled={busy}
+              className={busy ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+            >
               <Upload className="size-5" />
               {fa.importexport.pickFile}
             </label>

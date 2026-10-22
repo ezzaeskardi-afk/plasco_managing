@@ -14,7 +14,7 @@ class AppContainer(context: Context) {
     val photos: PhotoStore = PhotoStore(db, hub)
     val labels: LabelRepo = LabelRepo(db, hub)
     val settings: SettingsRepo = SettingsRepo(db, hub)
-    val backup: BackupRepo = BackupRepo(db, hub, settings, stock)
+    val backup: BackupRepo = BackupRepo(db, hub, stock)
 
     /** یک بار در شروع برنامه؛ جدول‌ها ساخته و همه‌چیز خوانده می‌شود. */
     suspend fun boot() {

@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -32,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
+import ir.plasco.managing.data.LocationMemory
 import ir.plasco.managing.domain.findProductByBarcode
 import ir.plasco.managing.domain.formatJalali
 import ir.plasco.managing.domain.displayProductName
@@ -56,13 +59,14 @@ import kotlinx.coroutines.launch
 fun StockTakeScreen(onBack: () -> Unit) {
     val container = LocalAppContainer.current
     val showMessage = LocalShowMessage.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val products by container.hub.products.collectAsStateWithLifecycle()
     val levels by container.hub.levels.collectAsStateWithLifecycle()
     val locations by container.hub.locations.collectAsStateWithLifecycle()
     val stockTakes by container.hub.stockTakes.collectAsStateWithLifecycle()
 
-    var locationId by remember(locations) { mutableStateOf(locations.firstOrNull()?.id.orEmpty()) }
+    var locationId by remember { mutableStateOf("") }
     val counts = remember { mutableStateMapOf<ID, String>() }
     var busy by remember { mutableStateOf(false) }
     var scanOpen by remember { mutableStateOf(false) }
@@ -75,6 +79,18 @@ fun StockTakeScreen(onBack: () -> Unit) {
     val active = remember(products) { products.filter { it.active } }
     val atLocation = remember(levels, locationId) {
         levels.filter { it.locationId == locationId }.associate { it.productId to it.qty }
+    }
+
+    // همان مکان آخر «ثبت ورود/خروج»؛ اگر آن مکان حذف شده باشد، شمارش‌های
+    // نیمه‌کاره هم به مکان تازه منتقل نمی‌شوند.
+    LaunchedEffect(locations) {
+        if (locations.none { it.id == locationId }) {
+            val remembered = LocationMemory.read(context)
+            locationId = locations.firstOrNull { it.id == remembered }?.id
+                ?: locations.firstOrNull()?.id.orEmpty()
+            counts.clear()
+            resumeId = null
+        }
     }
 
     // فقط متن‌های عددی معتبر شمرده می‌شوند؛ «اعمال» هم از همین نقشه تغذیه می‌شود
@@ -117,6 +133,10 @@ fun StockTakeScreen(onBack: () -> Unit) {
     // اعمال و بازگردانی مثل نسخهٔ وب اول پرسش «مطمئنی؟» دارند؛ اعمال تعداد کالاهای
     // متغیر را می‌گوید و بازگردانی هم توضیح می‌دهد که جلسه دوباره «باز» می‌شود.
     fun applyCounts() {
+        if (locations.none { it.id == locationId }) {
+            showMessage(Fa.stocktake.pickLocation)
+            return
+        }
         // شمارش منفی معنی ندارد؛ نسخهٔ وب هم همان‌جا ردش می‌کند.
         if (counted.values.any { it < 0 }) {
             showMessage(Fa.stocktake.enterQty)
@@ -126,6 +146,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
         scope.launch {
             try {
                 container.stock.applyStockTake(locationId, counted, stockTakeId = resumeId)
+                LocationMemory.write(context, locationId)
                 showMessage(Fa.stocktake.applied)
                 counts.clear()
                 resumeId = null

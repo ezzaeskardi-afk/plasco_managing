@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,7 @@ import ir.plasco.managing.ui.components.Panel
 import ir.plasco.managing.ui.components.QuickActionTile
 import ir.plasco.managing.ui.components.SectionTitle
 import ir.plasco.managing.ui.theme.toneColor
+import kotlinx.coroutines.delay
 
 private const val BACKUP_STALE_DAYS = 7
 private const val ALERT_LIMIT = 8
@@ -86,9 +88,17 @@ fun HomeScreen(
     val recent = remember(movements) { movements.take(RECENT_LIMIT) }
     // حرکتی که خودش واگرد شده، دکمهٔ واگرد ندارد.
     val undoneIds = remember(movements) { movements.mapNotNull { it.undoOf }.toSet() }
-    val backupStale = remember(settings.lastBackupAt) {
+    // A phone can stay on the home screen for days; without a tick the 7-day
+    // banner would only appear after the next app start.
+    val now by produceState(initialValue = System.currentTimeMillis()) {
+        while (true) {
+            delay(60L * 60 * 1000)
+            value = System.currentTimeMillis()
+        }
+    }
+    val backupStale = remember(settings.lastBackupAt, now) {
         val last = settings.lastBackupAt
-        last == null || System.currentTimeMillis() - last > BACKUP_STALE_DAYS * 24L * 60 * 60 * 1000
+        last == null || now - last > BACKUP_STALE_DAYS * 24L * 60 * 60 * 1000
     }
 
     if (products.isEmpty()) {
@@ -233,7 +243,7 @@ fun HomeScreen(
                     TextButton(onClick = onOpenMovements) {
                         Text(Fa.home.viewAll, style = MaterialTheme.typography.labelMedium)
                         Icon(
-                            Icons.Filled.KeyboardArrowLeft,
+                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
                         )

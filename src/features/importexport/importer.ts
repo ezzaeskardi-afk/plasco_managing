@@ -151,6 +151,20 @@ export function readCell(row: Record<string, string>, column: string | undefined
   return (row[column] ?? '').toString().trim();
 }
 
+interface OptionalAmount {
+  value?: number;
+  error?: string;
+}
+
+/** An empty cell means "the file does not carry this field"; anything else must be a non-negative integer. */
+function parseOptionalAmount(raw: string, label: string): OptionalAmount {
+  if (!raw) return {};
+  const value = parseIntegerInput(raw);
+  if (value == null) return { error: `${label} عدد نیست.` };
+  if (value < 0) return { error: `${label} نمی‌تواند منفی باشد.` };
+  return { value };
+}
+
 export async function buildContext(target: PlascoDb = db): Promise<ImportContext> {
   const [products, brands, locations] = await Promise.all([
     listProducts(target),
@@ -220,21 +234,34 @@ export function prepareRows(
       };
     }
 
+    const buy = parseOptionalAmount(readCell(row, map.buy), FIELD_LABELS.buy);
+    const retail = parseOptionalAmount(readCell(row, map.retail), FIELD_LABELS.retail);
+    const wholesale = parseOptionalAmount(readCell(row, map.wholesale), FIELD_LABELS.wholesale);
+    const amountError = buy.error ?? retail.error ?? wholesale.error;
+    if (amountError) return { rowNumber, action: 'error', reason: amountError };
+
     const brandName = readCell(row, map.brand);
     const brandN = brandName ? normalizeFa(brandName) : '';
     const brandId = brandN ? brandByName.get(brandN) : undefined;
     const nameN = name ? buildNameN({ name }) : '';
 
     const existing = matchProduct(context, { barcode, code, nameN, brandId });
+
+    let quantity: number | undefined;
+    if (mode === 'full') {
+      const quantityRaw = readCell(row, map.quantity);
+      if (quantityRaw) {
+        const parsed = parseOptionalAmount(quantityRaw, FIELD_LABELS.quantity);
+        if (parsed.error) return { rowNumber, action: 'error', reason: parsed.error };
+        quantity = parsed.value;
+      }
+    }
+
     const dedupeKey = barcode || code || `${nameN}\u0000${brandId ?? ''}`;
     if (seen.has(dedupeKey)) {
       return { rowNumber, action: 'error', reason: 'این ردیف تکراری است.' };
     }
     seen.add(dedupeKey);
-
-    const buy = parseIntegerInput(readCell(row, map.buy));
-    const retail = parseIntegerInput(readCell(row, map.retail));
-    const wholesale = parseIntegerInput(readCell(row, map.wholesale));
 
     if (mode === 'prices') {
       // Only prices travel: the sheet must not rename products, resize packs or add brands.
@@ -246,13 +273,13 @@ export function prepareRows(
           reason: 'در لیست کالاهای مغازه پیدا نشد.',
         };
       }
-      if (buy == null && retail == null && wholesale == null) {
+      if (buy.value == null && retail.value == null && wholesale.value == null) {
         return { rowNumber, action: 'error', reason: 'این ردیف قیمتی ندارد.' };
       }
       const priceDraft: Partial<ProductDraft> = {};
-      if (buy != null) priceDraft.buyPrice = Math.max(0, buy);
-      if (retail != null) priceDraft.retailPrice = Math.max(0, retail);
-      if (wholesale != null) priceDraft.wholesalePrice = Math.max(0, wholesale);
+      if (buy.value != null) priceDraft.buyPrice = buy.value;
+      if (retail.value != null) priceDraft.retailPrice = retail.value;
+      if (wholesale.value != null) priceDraft.wholesalePrice = wholesale.value;
       return {
         rowNumber,
         action: 'update',
@@ -270,12 +297,10 @@ export function prepareRows(
     if (packLabel) draft.packLabel = packLabel;
     const packSize = parseIntegerInput(readCell(row, map.packSize));
     if (packSize != null) draft.packSize = Math.max(1, packSize);
-    if (buy != null) draft.buyPrice = Math.max(0, buy);
-    if (retail != null) draft.retailPrice = Math.max(0, retail);
-    if (wholesale != null) draft.wholesalePrice = Math.max(0, wholesale);
+    if (buy.value != null) draft.buyPrice = buy.value;
+    if (retail.value != null) draft.retailPrice = retail.value;
+    if (wholesale.value != null) draft.wholesalePrice = wholesale.value;
 
-    const quantityRaw = readCell(row, map.quantity);
-    const quantity = quantityRaw ? parseIntegerInput(quantityRaw) : null;
     const locationName = readCell(row, map.location);
     const locationId = locationName
       ? locationByName.get(normalizeFa(locationName))
@@ -288,7 +313,7 @@ export function prepareRows(
       productId: existing?.id,
       draft,
       newBrandName: !brandId && brandName ? brandName : undefined,
-      quantity: quantity ?? undefined,
+      quantity,
       locationId,
       quantitySkipped: quantity != null && !locationId,
     };
@@ -354,10 +379,15 @@ export async function commitRows(
   // One restore point per product: without this, a file with two rows touching
   // the same product records the already-imported values as its «before».
   const journaledUpdates = new Set<ID>();
+  // A file that names the same new brand on many rows must create it once.
+  const createdBrands = new Map<string, ID>();
 
   try {
     for (let offset = 0; offset < usable.length; offset += chunkSize) {
       const chunk = usable.slice(offset, offset + chunkSize);
+      // Counters are committed only when the whole chunk commits; a rolled-back
+      // chunk must not inflate the batch totals (or the partial batch below).
+      const counts = { created: 0, updated: 0, skipped: 0, failed: 0, movements: 0 };
       // Every table a nested repo call may touch must be listed here, otherwise
       // Dexie raises SubTransactionError (priceChanges was the missing one).
       await target.transaction(
@@ -376,7 +406,7 @@ export async function commitRows(
           const journal: ImportEntry[] = [];
           for (const row of chunk) {
             if (!row.draft) {
-              result.skipped += 1;
+              counts.skipped += 1;
               continue;
             }
             try {
@@ -386,27 +416,38 @@ export async function commitRows(
               if (partial.code) {
                 const clash = await target.products.where('code').equals(partial.code).first();
                 if (clash && clash.id !== row.productId) {
-                  result.failed += 1;
+                  counts.failed += 1;
                   continue;
                 }
               }
               if (!partial.brandId && row.newBrandName) {
-                const brand = await createBrand({ name: row.newBrandName }, target);
-                partial.brandId = brand.id;
-                journal.push({ id: newId(), batchId, kind: 'brand-created', brandId: brand.id });
+                const brandKey = normalizeFa(row.newBrandName);
+                let brandId = createdBrands.get(brandKey);
+                if (!brandId) {
+                  const stored = await target.brands.where('nameN').equals(brandKey).first();
+                  if (stored && !stored.deletedAt) {
+                    brandId = stored.id;
+                  } else {
+                    const brand = await createBrand({ name: row.newBrandName }, target);
+                    brandId = brand.id;
+                    journal.push({ id: newId(), batchId, kind: 'brand-created', brandId: brand.id });
+                  }
+                  createdBrands.set(brandKey, brandId);
+                }
+                partial.brandId = brandId;
               }
 
               let productId: ID;
               const isNew = row.action === 'new';
               if (isNew) {
                 productId = (await createProduct(withDefaults(partial), target)).id;
-                result.created += 1;
+                counts.created += 1;
                 journal.push({ id: newId(), batchId, kind: 'product-created', productId });
               } else if (row.productId) {
                 const existing = await target.products.get(row.productId);
                 await updateProduct(row.productId, partial, { reason: 'import' }, target);
                 productId = row.productId;
-                result.updated += 1;
+                counts.updated += 1;
                 if (existing && !journaledUpdates.has(productId)) {
                   journaledUpdates.add(productId);
                   journal.push({
@@ -418,7 +459,7 @@ export async function commitRows(
                   });
                 }
               } else {
-                result.skipped += 1;
+                counts.skipped += 1;
                 continue;
               }
 
@@ -437,7 +478,7 @@ export async function commitRows(
                     },
                     target,
                   );
-                  movementsWritten += 1;
+                  counts.movements += 1;
                   journal.push({
                     id: newId(),
                     batchId,
@@ -449,7 +490,7 @@ export async function commitRows(
               }
             } catch (error) {
               if (error instanceof DuplicateCodeError || error instanceof ProductCodeExhaustedError) {
-                result.failed += 1;
+                counts.failed += 1;
                 continue;
               }
               throw error;
@@ -458,12 +499,29 @@ export async function commitRows(
           if (journal.length > 0) await target.importEntries.bulkAdd(journal);
         },
       );
+      result.created += counts.created;
+      result.updated += counts.updated;
+      result.skipped += counts.skipped;
+      result.failed += counts.failed;
+      movementsWritten += counts.movements;
       onProgress?.(Math.min(offset + chunkSize, usable.length), usable.length);
     }
   } catch (error) {
-    // A chunk that failed mid-way leaves the journal rows of earlier chunks with
-    // no batch row to reach them; drop them or they linger forever.
-    await target.importEntries.where('batchId').equals(batchId).delete();
+    // Earlier chunks are already committed and their journal rows are intact.
+    // Keep them undoable by writing the batch row now; the failed chunk itself
+    // was rolled back by Dexie, so its journal rows never reached the table.
+    if (result.created + result.updated > 0) {
+      await recordImportBatch(
+        {
+          id: batchId,
+          fileName,
+          created: result.created,
+          updated: result.updated,
+          movements: movementsWritten,
+        },
+        target,
+      );
+    }
     throw error;
   }
 

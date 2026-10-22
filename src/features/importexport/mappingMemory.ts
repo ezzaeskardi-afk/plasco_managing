@@ -1,6 +1,7 @@
 import { db as defaultDb, type PlascoDb } from '@/db/dexie';
 import { getSettings, setSettings } from '@/db/repos';
 import type { SavedImportMapping } from '@/db/types';
+import { normalizeFa } from '@/domain/normalizeFa';
 import { IMPORT_FIELDS, importSignature, type ColumnMap, type ImportMode } from './importer';
 
 /** Only the newest mappings stay; older company lists rarely come back. */
@@ -14,6 +15,26 @@ export function toColumnMap(saved: Record<string, string>): ColumnMap {
     if (typeof header === 'string' && header) map[field] = header;
   }
   return map;
+}
+
+/**
+ * The saved signature ignores case/diacritics, but `readCell` needs the exact
+ * header text in the current file. Point every field at the file's own spelling;
+ * a header that disappeared from the file is dropped.
+ */
+export function reconcileColumnMap(
+  map: ColumnMap,
+  headers: readonly string[],
+): ColumnMap {
+  const byNormalized = new Map(headers.map((header) => [normalizeFa(header), header]));
+  const next: ColumnMap = {};
+  for (const field of IMPORT_FIELDS) {
+    const savedHeader = map[field];
+    if (!savedHeader) continue;
+    const current = byNormalized.get(normalizeFa(savedHeader));
+    if (current) next[field] = current;
+  }
+  return next;
 }
 
 export async function findSavedMapping(

@@ -49,7 +49,7 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
 
     suspend fun apply(input: MovementInput): Movement {
         val movement = inTransaction { db -> writeMovement(db, input) }
-        hub.reloadStock()
+        hub.refreshStockForProduct(movement.productId)
         return movement
     }
 
@@ -75,14 +75,14 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
             )
             outgoing to incoming
         }
-        hub.reloadStock()
+        hub.refreshStockForProduct(productId)
         return result
     }
 
     /** حرکت جبرانی. دو بار نمی‌شود و واگرد خودش هم واگرد نمی‌شود. */
     suspend fun undo(movementId: ID): Movement {
         val result = inTransaction { db -> undoInside(db, movementId) }
-        hub.reloadStock()
+        hub.refreshStockForProduct(result.productId)
         return result
     }
 
@@ -141,8 +141,11 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
                     },
                 )
             }
+            // یک بار همهٔ ردیف‌های این مکان خوانده می‌شود؛ بعد برای هر کالا فقط
+            // از حافظه می‌خوانیم.
+            val currentAtLocation: Map<ID, StockLevel> = levelsAtLocation(db, locationId)
             for ((productId, counted) in counts) {
-                val current = currentQty(db, productId, locationId)
+                val current = currentAtLocation[productId]
                 db.insertOrThrow(
                     "stockTakeItems",
                     null,
@@ -151,13 +154,19 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
                         put("stockTakeId", id)
                         put("productId", productId)
                         put("counted", counted)
-                        put("systemQtyAtCount", current)
+                        put("systemQtyAtCount", current?.qty ?: 0)
                         put("at", now)
                     },
                 )
-                val delta = counted - current
+                val delta = counted - (current?.qty ?: 0)
                 if (delta != 0) {
-                    writeMovement(db, MovementInput(productId, locationId, MovementType.Count, delta, refId = id))
+                    // ردیف موجودی همین الان خوانده شده؛ دیگر لازم نیست برای هر کالا
+                    // یک SELECT جداگانه بزنیم (قبلاً ۵٬۰۰۰ کالا یعنی ۵٬۰۰۰ کوئری).
+                    writeMovement(
+                        db,
+                        MovementInput(productId, locationId, MovementType.Count, delta, refId = id),
+                        current,
+                    )
                 }
             }
             db.update(
@@ -172,7 +181,7 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
             )
             StockTake(id, locationId, StockTakeStatus.Applied, now, note, createdAt, now, null)
         }
-        hub.reloadStock()
+        hub.refreshStockForLocation(locationId)
         hub.reloadStockTakes()
         return take
     }
@@ -209,7 +218,7 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
             )
             take.copy(status = StockTakeStatus.Open, appliedAt = null, updatedAt = now)
         }
-        hub.reloadStock()
+        hub.refreshStockForLocation(result.locationId)
         hub.reloadStockTakes()
         return result
     }
@@ -230,7 +239,10 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
     internal fun writeMovementInTransaction(db: SQLiteDatabase, input: MovementInput): Movement =
         writeMovement(db, input)
 
-    private fun writeMovement(db: SQLiteDatabase, input: MovementInput): Movement {
+    private fun writeMovement(db: SQLiteDatabase, input: MovementInput): Movement =
+        writeMovement(db, input, levelRow(db, input.productId, input.locationId))
+
+    private fun writeMovement(db: SQLiteDatabase, input: MovementInput, existing: StockLevel?): Movement {
         if (input.qty == 0) throw MovementQtyMustBeNonZero()
         val now = input.at ?: System.currentTimeMillis()
         val movement = Movement(
@@ -248,7 +260,6 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
             createdAt = now,
             updatedAt = now,
         )
-        val existing = levelRow(db, input.productId, input.locationId)
         val current = existing?.qty ?: 0
         val next = current + input.qty
         if (next < 0) throw InsufficientStockException(input.productId, input.locationId, current, input.qty)
@@ -381,8 +392,16 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
             arrayOf(productId, locationId),
         ).use { cursor -> if (cursor.moveToFirst()) cursor.toStockLevel() else null }
 
-    private fun currentQty(db: SQLiteDatabase, productId: ID, locationId: ID): Int =
-        levelRow(db, productId, locationId)?.qty ?: 0
+    /** همهٔ ردیف‌های یک مکان با یک کوئری، برای اعمال انبارگردانی. */
+    private fun levelsAtLocation(db: SQLiteDatabase, locationId: ID): Map<ID, StockLevel> =
+        db.rawQuery("SELECT * FROM stockLevels WHERE locationId = ?", arrayOf(locationId)).use { cursor ->
+            val rows = LinkedHashMap<ID, StockLevel>()
+            while (cursor.moveToNext()) {
+                val level = cursor.toStockLevel()
+                rows[level.productId] = level
+            }
+            rows
+        }
 
     private fun movementById(db: SQLiteDatabase, id: ID): Movement? =
         db.rawQuery("SELECT * FROM movements WHERE id = ?", arrayOf(id)).use { cursor ->

@@ -73,14 +73,15 @@ fun HomeScreen(
     val container = LocalAppContainer.current
     val products by container.hub.products.collectAsStateWithLifecycle()
     val levels by container.hub.levels.collectAsStateWithLifecycle()
+    val totals by container.hub.totals.collectAsStateWithLifecycle()
     val locations by container.hub.locations.collectAsStateWithLifecycle()
     val brands by container.hub.brands.collectAsStateWithLifecycle()
     val categories by container.hub.categories.collectAsStateWithLifecycle()
     val settings by container.hub.settings.collectAsStateWithLifecycle()
     val movements by container.hub.movements.collectAsStateWithLifecycle()
 
-    val valuation = remember(products, levels) { valuate(products, levels) }
-    val alerts = remember(products, levels) { stockAlerts(products, levels) }
+    val valuation = remember(products, levels, totals) { valuate(products, levels, totals) }
+    val alerts = remember(products, totals) { stockAlerts(products, totals) }
     val locationNames = remember(locations) { locations.associate { it.id to it.name } }
     val brandNames = remember(brands) { brands.associate { it.id to it.name } }
     val categoryNames = remember(categories) { categories.associate { it.id to it.name } }

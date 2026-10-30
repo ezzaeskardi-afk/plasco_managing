@@ -7,17 +7,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -96,10 +99,14 @@ fun StockTakeScreen(onBack: () -> Unit) {
     // فقط متن‌های عددی معتبر شمرده می‌شوند؛ «اعمال» هم از همین نقشه تغذیه می‌شود
     // تا جلسهٔ خالی ثبت نشود (همان محافظی که نسخهٔ وب دارد). منفی هم مثل نامعتبر
     // دور ریخته می‌شود تا شمارندهٔ تغییرات ردیف قرمز را نشمارد (وب اجازهٔ ثبتش نمی‌دهد).
-    val counted = remember(counts.toMap()) {
-        counts.mapNotNull { (productId, text) ->
-            parseIntegerInput(text)?.takeIf { it >= 0 }?.let { productId to it }
-        }.toMap()
+    // derivedStateOf: با هر کلید، کل نقشه کپی نمی‌شود؛ فقط هنگام خواندن یک بار
+    // محاسبه می‌شود و تا تغییر بعدی همان مقدار می‌ماند.
+    val counted by remember(counts) {
+        derivedStateOf {
+            counts.mapNotNull { (productId, text) ->
+                parseIntegerInput(text)?.takeIf { it >= 0 }?.let { productId to it }
+            }.toMap()
+        }
     }
 
     // تعداد کالاهایی که واقعاً عوض می‌شوند — همان هشداری که نسخهٔ وب می‌دهد.
@@ -159,6 +166,8 @@ fun StockTakeScreen(onBack: () -> Unit) {
     }
 
     fun revertTake(id: ID) {
+        if (busy) return
+        busy = true
         scope.launch {
             try {
                 container.stock.revertStockTake(id)
@@ -169,6 +178,8 @@ fun StockTakeScreen(onBack: () -> Unit) {
                 resumeId = null
             } catch (error: Throwable) {
                 showMessage(messageFor(error))
+            } finally {
+                busy = false
             }
         }
     }
@@ -244,7 +255,15 @@ fun StockTakeScreen(onBack: () -> Unit) {
                 Button(
                     enabled = !busy && counted.isNotEmpty(),
                     onClick = { confirmApply = true },
-                ) { Text(Fa.stocktake.apply) }
+                ) {
+                    if (busy) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(Fa.stocktake.applying)
+                    } else {
+                        Text(Fa.stocktake.apply)
+                    }
+                }
             }
         }
 
@@ -272,11 +291,13 @@ fun StockTakeScreen(onBack: () -> Unit) {
                     }
                     when (take.status) {
                         StockTakeStatus.Applied -> OutlinedButton(
+                            enabled = !busy,
                             onClick = { revertId = take.id },
                         ) { Text(Fa.stocktake.revert) }
                         // جلسهٔ نیمه‌کاره (برگردانده‌شده) را همین‌جا می‌شود ادامه داد:
                         // مکان و شمارش‌های قبلی‌اش برمی‌گردند و دوباره ثبت می‌شود.
                         StockTakeStatus.Open -> OutlinedButton(
+                            enabled = !busy,
                             onClick = {
                                 scope.launch {
                                     val saved = container.stock.itemsOf(take.id)

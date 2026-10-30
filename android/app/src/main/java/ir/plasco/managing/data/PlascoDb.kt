@@ -11,6 +11,13 @@ import ir.plasco.managing.domain.normalizeFa
  */
 class PlascoDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
 
+    init {
+        // WAL: نوشتنِ هر حرکت یک fsync کامل روی فایل اصلی لازم ندارد و خواندن‌ها
+        // هنگام نوشتن بلاک نمی‌شوند. فرمت فایل عوض نمی‌شود؛ بکاپ از روی جدول‌ها
+        // خوانده می‌شود، نه از روی فایل، پس سازگاری دو نسخه دست‌نخورده است.
+        setWriteAheadLoggingEnabled(true)
+    }
+
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)

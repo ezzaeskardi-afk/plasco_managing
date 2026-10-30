@@ -70,7 +70,8 @@ class ProductRepo(private val helper: PlascoDb, private val hub: DataHub, privat
             created
         }
         hub.reloadProducts()
-        hub.reloadStock()
+        // فقط ردیف‌های موجودی همین کالا خوانده می‌شود، نه کل جدول.
+        if (input.initialQty != 0 && input.locationId != null) hub.refreshStockForProduct(product.id)
         hub.reloadSettings()
         return product
     }

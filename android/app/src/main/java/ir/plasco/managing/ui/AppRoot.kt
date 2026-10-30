@@ -3,9 +3,11 @@ package ir.plasco.managing.ui
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -30,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -100,13 +101,12 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 @Composable
 fun AppRoot(container: AppContainer) {
     val settings by container.hub.settings.collectAsStateWithLifecycle()
+    val loaded by container.hub.loaded.collectAsStateWithLifecycle()
     var bootError by remember { mutableStateOf<String?>(null) }
-    var booted by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         try {
             container.boot()
-            booted = true
         } catch (error: Throwable) {
             bootError = error.message ?: Fa.errors.failed
         }
@@ -130,29 +130,31 @@ fun AppRoot(container: AppContainer) {
             Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
                 if (bootError != null) {
                     BootErrorScreen(bootError ?: Fa.errors.failed)
-                } else if (!booted) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(Fa.common.loading, style = MaterialTheme.typography.bodyLarge)
-                    }
                 } else {
+                    // پوسته (نوار پایین و Scaffold) از همان فریم اول می‌آید؛ فقط
+                    // محتوا تا خواندن داده صبر می‌کند. قبلاً کل صفحه یک متن
+                    // «در حال بارگذاری» بود و برنامه دیر شروع‌شده به نظر می‌رسید.
                     val backStackEntry by navController.currentBackStackEntryAsState()
                     val route = backStackEntry?.destination?.route
                     Scaffold(
                         snackbarHost = { SnackbarHost(snackbar) },
                         bottomBar = { BottomBar(navController, route) },
                     ) { padding ->
-                        NavHost(
-                            navController = navController,
-                            startDestination = Routes.Home,
-                            modifier = Modifier.padding(padding),
-                            // پیش‌فرضِ navigation-compose یک محو شدن ۷۰۰ میلی‌ثانیه‌ای است که
-                            // جابه‌جایی بین تب‌ها را کند نشان می‌دهد؛ محو کوتاه ۱۵۰ms همان
-                            // حس «فوری» را می‌دهد و هدفِ جابه‌جایی سریع بین صفحه‌ها را می‌رساند.
-                            enterTransition = { fadeIn(tween(150)) },
-                            exitTransition = { fadeOut(tween(150)) },
-                            popEnterTransition = { fadeIn(tween(150)) },
-                            popExitTransition = { fadeOut(tween(150)) },
-                        ) {
+                        if (!loaded) {
+                            BootSkeleton(Modifier.padding(padding))
+                        } else {
+                            NavHost(
+                                navController = navController,
+                                startDestination = Routes.Home,
+                                modifier = Modifier.padding(padding),
+                                // پیش‌فرضِ navigation-compose یک محو شدن ۷۰۰ میلی‌ثانیه‌ای است که
+                                // جابه‌جایی بین تب‌ها را کند نشان می‌دهد؛ محو کوتاه ۱۵۰ms همان
+                                // حس «فوری» را می‌دهد و هدفِ جابه‌جایی سریع بین صفحه‌ها را می‌رساند.
+                                enterTransition = { fadeIn(tween(150)) },
+                                exitTransition = { fadeOut(tween(150)) },
+                                popEnterTransition = { fadeIn(tween(150)) },
+                                popExitTransition = { fadeOut(tween(150)) },
+                            ) {
                             composable(Routes.Home) {
                                 HomeScreen(
                                     onOpenProduct = { id -> navController.navigate(Routes.productEdit(id)) },
@@ -240,6 +242,7 @@ fun AppRoot(container: AppContainer) {
         }
     }
 }
+}
 
 @Composable
 private fun BottomBar(navController: NavHostController, route: String?) {
@@ -290,5 +293,30 @@ private fun BootErrorScreen(message: String) {
     ) {
         Text(Fa.errors.title, style = MaterialTheme.typography.titleLarge)
         Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * اسکلتِ سادهٔ صفحه تا وقتی داده از دیتابیس خوانده می‌شود؛ نوار پایین و پوسته
+ * همان موقع دیده می‌شوند، پس برنامه «زود باز شده» به نظر می‌رسد.
+ */
+@Composable
+private fun BootSkeleton(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth().height(112.dp),
+        ) {}
+        repeat(3) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+            ) {}
+        }
     }
 }

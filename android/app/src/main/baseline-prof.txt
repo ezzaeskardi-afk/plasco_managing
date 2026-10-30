@@ -1,0 +1,30 @@
+# پروفایل پایهٔ شروع سرد (Baseline Profile).
+# AGP این فایل را هنگام ساخت release با نگاشت R8 بازنویسی و در
+# assets/dexopt/baseline.prof بسته‌بندی می‌کند؛ کتابخانه‌ها پروفایل خودشان را
+# دارند و این فایل فقط مسیر شروع خود برنامه را HOT/STARTUP علامت می‌زند:
+# ساخت Activity، تم، خواندن اولیهٔ دیتابیس و اولین صفحه.
+HSPLir/plasco/managing/MainActivity;-><init>()V
+HSPLir/plasco/managing/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLir/plasco/managing/MainActivity;->onStart()V
+HSPLir/plasco/managing/MainActivity;->onResume()V
+HSPLir/plasco/managing/PlascoApp;-><init>()V
+HSPLir/plasco/managing/PlascoApp;->onCreate()V
+HSPLir/plasco/managing/data/PlascoDb;-><init>(Landroid/content/Context;)V
+HSPLir/plasco/managing/data/PlascoDb;->onConfigure(Landroid/database/sqlite/SQLiteDatabase;)V
+HSPLir/plasco/managing/data/PlascoDb;->onCreate(Landroid/database/sqlite/SQLiteDatabase;)V
+HSPLir/plasco/managing/data/DataHub;-><init>(Lir/plasco/managing/data/PlascoDb;)V
+HSPLir/plasco/managing/data/DataHub;->reloadAll(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+HSPLir/plasco/managing/data/DataHub;->readSettings(Landroid/database/sqlite/SQLiteDatabase;)Lir/plasco/managing/model/Settings;
+HSPLir/plasco/managing/data/DataHub;->readProducts(Landroid/database/sqlite/SQLiteDatabase;)Ljava/util/List;
+HSPLir/plasco/managing/data/DataHub;->readLevels(Landroid/database/sqlite/SQLiteDatabase;)Ljava/util/List;
+HSPLir/plasco/managing/data/DataHub;->readMovements(Landroid/database/sqlite/SQLiteDatabase;)Ljava/util/List;
+HSPLir/plasco/managing/data/DataHub;->readBrands(Landroid/database/sqlite/SQLiteDatabase;)Ljava/util/List;
+HSPLir/plasco/managing/data/DataHub;->readCategories(Landroid/database/sqlite/SQLiteDatabase;)Ljava/util/List;
+HSPLir/plasco/managing/data/DataHub;->readLocations(Landroid/database/sqlite/SQLiteDatabase;)Ljava/util/List;
+HSPLir/plasco/managing/domain/StockKt;->productTotals(Ljava/util/List;)Ljava/util/Map;
+HSPLir/plasco/managing/domain/StockKt;->valuate(Ljava/util/List;Ljava/util/List;Ljava/util/Map;)Lir/plasco/managing/domain/ValuationSummary;
+HSPLir/plasco/managing/domain/StockKt;->stockAlerts(Ljava/util/List;Ljava/util/Map;)Lkotlin/Pair;
+HSPLir/plasco/managing/ui/AppRootKt;->AppRoot(Lir/plasco/managing/data/AppContainer;Landroidx/compose/runtime/Composer;I)V
+HSPLir/plasco/managing/ui/AppRootKt;->BootSkeleton(Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+HSPLir/plasco/managing/ui/theme/ThemeKt;->PlascoTheme(Lir/plasco/managing/ui/theme/ThemeMode;FLkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
+HSPLir/plasco/managing/ui/screens/HomeScreenKt;->HomeScreen(Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function3;Landroidx/compose/runtime/Composer;I)V

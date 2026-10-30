@@ -36,9 +36,8 @@ import ir.plasco.managing.domain.findProductByBarcode
 import ir.plasco.managing.domain.displayProductName
 import ir.plasco.managing.domain.formatNumber
 import ir.plasco.managing.domain.parseIntegerInput
-import ir.plasco.managing.domain.ProductSearchIndex
-import ir.plasco.managing.domain.productTotals
 import ir.plasco.managing.model.MovementType
+import ir.plasco.managing.model.Product
 import ir.plasco.managing.ui.Fa
 import ir.plasco.managing.ui.LocalAppContainer
 import ir.plasco.managing.ui.LocalShowMessage
@@ -50,7 +49,10 @@ import ir.plasco.managing.ui.components.ScreenHeader
 import ir.plasco.managing.ui.components.SectionTitle
 import ir.plasco.managing.ui.components.TextField
 import ir.plasco.managing.ui.scan.BarcodeScannerDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** کارهایی که کاربر از این صفحه می‌خواهد؛ انتقال دو ساق دارد. */
 private enum class Action(val label: String, val type: MovementType?, val outgoing: Boolean) {
@@ -73,8 +75,10 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
     val scope = rememberCoroutineScope()
     val products by container.hub.products.collectAsStateWithLifecycle()
     val levels by container.hub.levels.collectAsStateWithLifecycle()
+    val totals by container.hub.totals.collectAsStateWithLifecycle()
     val locations by container.hub.locations.collectAsStateWithLifecycle()
     val brands by container.hub.brands.collectAsStateWithLifecycle()
+    val index by container.hub.searchIndex.collectAsStateWithLifecycle()
 
     var action by remember {
         mutableStateOf(
@@ -101,12 +105,26 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
 
     val selected = products.firstOrNull { it.id == productId }
     val brandNames = remember(brands) { brands.associate { it.id to it.name } }
-    val index = remember(products, brandNames) { ProductSearchIndex(products, brandNames) }
-    val results = remember(query, index) {
-        if (query.isBlank()) emptyList() else index.search(query, PICKER_LIMIT).map { it.product }
+    // انتخاب‌گر: ۱۰۰ms پس از آخرین کلید، روی ترد پس‌زمینه و فقط ۲۰ نتیجه.
+    var settledQuery by remember { mutableStateOf(query) }
+    LaunchedEffect(query) {
+        if (query == settledQuery) return@LaunchedEffect
+        delay(100)
+        settledQuery = query
     }
-    val totals = remember(levels) { productTotals(levels) }
-    val qtyAtLocation = levels.firstOrNull { it.productId == productId && it.locationId == locationId }?.qty ?: 0
+    var results by remember { mutableStateOf(emptyList<Product>()) }
+    LaunchedEffect(index, settledQuery) {
+        results = withContext(Dispatchers.Default) {
+            if (settledQuery.isBlank()) {
+                emptyList()
+            } else {
+                index.search(settledQuery, PICKER_LIMIT).map { it.product }
+            }
+        }
+    }
+    val qtyAtLocation = remember(levels, productId, locationId) {
+        levels.firstOrNull { it.productId == productId && it.locationId == locationId }?.qty ?: 0
+    }
     val cartonsEntered = parseIntegerInput(cartons) ?: 0
     val perCartonEntered = parseIntegerInput(perCarton) ?: 0
     val qty = cartonPieces(cartonsEntered, perCartonEntered, parseIntegerInput(pieces) ?: 0)
@@ -304,7 +322,7 @@ fun MovementScreen(initialProductId: String, initialType: String, onDone: () -> 
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        OutlinedButton(onClick = { productId = ""; query = "" }) { Text("تغییر کالا") }
+                        OutlinedButton(onClick = { productId = ""; query = ""; settledQuery = "" }) { Text("تغییر کالا") }
                     }
                 }
             }

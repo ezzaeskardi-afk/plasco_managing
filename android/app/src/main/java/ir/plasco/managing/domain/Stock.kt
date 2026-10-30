@@ -73,8 +73,14 @@ private fun sortedGroups(acc: Map<ID, GroupValuation>): List<GroupValuation> =
  * سه گروه مکان/برند/دسته هم مثل `src/domain/valuation.ts` ساخته می‌شوند تا خانه
  * بتواند مثل نسخهٔ وب تفکیک نشان دهد.
  */
-fun valuate(products: List<Product>, levels: List<StockLevel>): ValuationSummary {
-    val totals = productTotals(levels)
+fun valuate(products: List<Product>, levels: List<StockLevel>): ValuationSummary =
+    valuate(products, levels, productTotals(levels))
+
+/**
+ * همان محاسبه، با مجموع‌های آمادهٔ `DataHub.totals`؛ صفحهٔ خانه دیگر لازم نیست
+ * ۱۵٬۰۰۰ ردیف را دوباره بگشت. `levels` فقط برای تفکیک «مکان به مکان» می‌آید.
+ */
+fun valuate(products: List<Product>, levels: List<StockLevel>, totals: Map<ID, Int>): ValuationSummary {
     val active = products.filter { it.active && it.deletedAt == null }
     val activeById: Map<ID, Product> = active.associateBy { it.id }
     var pieces = 0
@@ -151,8 +157,11 @@ fun valuate(products: List<Product>, levels: List<StockLevel>): ValuationSummary
 data class StockAlertRow(val product: Product, val total: Int, val state: StockState)
 
 /** فهرست کالاهای کم‌موجود و ناموجود برای خانه. */
-fun stockAlerts(products: List<Product>, levels: List<StockLevel>): Pair<List<StockAlertRow>, List<StockAlertRow>> {
-    val totals = productTotals(levels)
+fun stockAlerts(products: List<Product>, levels: List<StockLevel>): Pair<List<StockAlertRow>, List<StockAlertRow>> =
+    stockAlerts(products, productTotals(levels))
+
+/** همان فهرست، با مجموع‌های آمادهٔ `DataHub.totals`. */
+fun stockAlerts(products: List<Product>, totals: Map<ID, Int>): Pair<List<StockAlertRow>, List<StockAlertRow>> {
     val low = mutableListOf<StockAlertRow>()
     val out = mutableListOf<StockAlertRow>()
     for (product in products) {

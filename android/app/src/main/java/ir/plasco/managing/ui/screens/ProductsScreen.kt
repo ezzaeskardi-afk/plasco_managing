@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,15 +24,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ir.plasco.managing.domain.ProductSearchIndex
 import ir.plasco.managing.domain.formatNumber
-import ir.plasco.managing.domain.productTotals
 import ir.plasco.managing.model.ID
 import ir.plasco.managing.ui.Fa
 import ir.plasco.managing.ui.LocalAppContainer
 import ir.plasco.managing.ui.components.EmptyState
 import ir.plasco.managing.ui.components.ProductRow
 import ir.plasco.managing.ui.components.ScreenHeader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 /**
  * فهرست کالاها. از خانه می‌شود با فیلتر آمادهٔ مکان/برند/دسته وارد شد
@@ -48,27 +50,36 @@ fun ProductsScreen(
     val container = LocalAppContainer.current
     val products by container.hub.products.collectAsStateWithLifecycle()
     val levels by container.hub.levels.collectAsStateWithLifecycle()
+    val totals by container.hub.totals.collectAsStateWithLifecycle()
     val brands by container.hub.brands.collectAsStateWithLifecycle()
     val categories by container.hub.categories.collectAsStateWithLifecycle()
     val locations by container.hub.locations.collectAsStateWithLifecycle()
+    val index by container.hub.searchIndex.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     var locationFilter by rememberSaveable { mutableStateOf(initialLocationId) }
     var brandFilter by rememberSaveable { mutableStateOf(initialBrandId) }
     var categoryFilter by rememberSaveable { mutableStateOf(initialCategoryId) }
 
-    val totals = remember(levels) { productTotals(levels) }
+    // جست‌وجو ۱۲۰ms بعد از آخرین کلید اجرا می‌شود و روی ترد پس‌زمینه؛
+    // روی گوشی ضعیف، هر کلید دیگر ایندکس ۵٬۰۰۰ کالا را نمی‌گردد.
+    var settledQuery by remember { mutableStateOf(query) }
+    LaunchedEffect(query) {
+        if (query == settledQuery) return@LaunchedEffect
+        delay(120)
+        settledQuery = query
+    }
+    var results by remember { mutableStateOf(index.all()) }
+    LaunchedEffect(index, settledQuery) {
+        results = withContext(Dispatchers.Default) {
+            if (settledQuery.isBlank()) index.all() else index.search(settledQuery).map { it.product }
+        }
+    }
+
     val brandNames = remember(brands) { brands.associate { it.id to it.name } }
     val categoryNames = remember(categories) { categories.associate { it.id to it.name } }
     // کالاهایی که در این مکان موجودی مثبت دارند — قاعدهٔ فیلتر مکان نسخهٔ وب.
     val positiveAt = remember(levels) {
         levels.asSequence().filter { it.qty > 0 }.map { it.productId to it.locationId }.toHashSet()
-    }
-    val index = remember(products, brandNames, categoryNames) {
-        ProductSearchIndex(products, brandNames, categoryNames)
-    }
-    // بدون پرس‌وجو همهٔ کالاها نشان داده می‌شوند (قبلاً بی‌سروصدا به ۲۰۰ تا بریده می‌شد).
-    val results = remember(query, index) {
-        if (query.isBlank()) index.all() else index.search(query).map { it.product }
     }
     val filtered = remember(results, locationFilter, brandFilter, categoryFilter, positiveAt) {
         results.filter { product ->

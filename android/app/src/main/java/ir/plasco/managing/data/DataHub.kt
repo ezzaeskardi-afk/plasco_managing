@@ -1,6 +1,8 @@
 package ir.plasco.managing.data
 
+import ir.plasco.managing.domain.ProductSearchIndex
 import ir.plasco.managing.domain.persianCollator
+import ir.plasco.managing.domain.productTotals
 import ir.plasco.managing.model.Brand
 import ir.plasco.managing.model.Category
 import ir.plasco.managing.model.ID
@@ -55,6 +57,26 @@ class DataHub(private val helper: PlascoDb) {
     val stockTakes: StateFlow<List<StockTake>> = _stockTakes.asStateFlow()
 
     /**
+     * مجموع موجودی هر کالا، یک بار در ترد پس‌زمینه حساب می‌شود. خانه دو محاسبه
+     * (`valuate` و `stockAlerts`) و صفحهٔ کالاها یک محاسبهٔ دیگر داشتند و هر سه
+     * ۱۵٬۰۰۰ ردیف را دوباره می‌گشتند؛ حالا همه از همین نقشه می‌خوانند.
+     */
+    private val _totals = MutableStateFlow<Map<ID, Int>>(emptyMap())
+    val totals: StateFlow<Map<ID, Int>> = _totals.asStateFlow()
+
+    /**
+     * ایندکس جست‌وجو یک بار (روی IO) ساخته می‌شود و با هر تغییر کالا/برند/دسته
+     * جایگزین می‌شود. قبلاً هر بار ورود به «کالاها» یا «ثبت ورود/خروج» آن را
+     * روی ترد UI از نو می‌ساخت.
+     */
+    private val _searchIndex = MutableStateFlow(ProductSearchIndex(emptyList()))
+    val searchIndex: StateFlow<ProductSearchIndex> = _searchIndex.asStateFlow()
+
+    /** بعد از اولین `reloadAll` روشن می‌شود؛ پوستهٔ برنامه زودتر از داده می‌آید. */
+    private val _loaded = MutableStateFlow(false)
+    val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
+
+    /**
      * شناسهٔ کالاهای عکس‌دار به زمان آخرین تغییر عکسشان. خودِ بایت‌ها در حافظه
      * نمی‌مانند (چند هزار عکس یعنی چند صد مگابایت)؛ بندانگشتی‌ها فقط در `PhotoStore`
      * و به‌اندازهٔ لازم خوانده می‌شوند. این نگاشت برای این است که UI بفهمد عکسِ یک
@@ -65,16 +87,24 @@ class DataHub(private val helper: PlascoDb) {
 
     suspend fun reloadAll() = withContext(Dispatchers.IO) {
         val db = helper.readableDatabase
-        _brands.value = readBrands(db)
-        _categories.value = readCategories(db)
+        // تنظیمات اول: تم و اندازهٔ فونت باید از همان اولین فریمِ محتوا درست باشد.
+        _settings.value = readSettings(db)
+        val brands = readBrands(db)
+        val categories = readCategories(db)
+        val products = readProducts(db)
+        _brands.value = brands
+        _categories.value = categories
         _locations.value = readLocations(db)
-        _products.value = readProducts(db)
-        _levels.value = readLevels(db)
+        _products.value = products
+        _searchIndex.value = buildIndex(products, brands, categories)
+        val levels = readLevels(db)
+        _levels.value = levels
+        _totals.value = productTotals(levels)
         _movements.value = readMovements(db)
         _movementCount.value = readMovementCount(db)
-        _settings.value = readSettings(db)
         _stockTakes.value = readStockTakes(db)
         _photoStamps.value = readPhotoStamps(db)
+        _loaded.value = true
     }
 
     suspend fun reloadPhotoStamps() = withContext(Dispatchers.IO) {
@@ -82,21 +112,76 @@ class DataHub(private val helper: PlascoDb) {
     }
 
     suspend fun reloadProducts() = withContext(Dispatchers.IO) {
-        _products.value = readProducts(helper.readableDatabase)
+        // ایندکس همراه خود فهرست ساخته و منتشر می‌شود تا هرگز به کالاهای قبلی
+        // اشاره نکند.
+        val products = readProducts(helper.readableDatabase)
+        val index = buildIndex(products, _brands.value, _categories.value)
+        _products.value = products
+        _searchIndex.value = index
     }
 
+    /** خواندن کامل موجودی — فقط برای بازسازی، بازیابی بکاپ و واردکردن. */
     suspend fun reloadStock() = withContext(Dispatchers.IO) {
         val db = helper.readableDatabase
-        _levels.value = readLevels(db)
+        val levels = readLevels(db)
+        _levels.value = levels
+        _totals.value = productTotals(levels)
+        refreshMovements(db)
+    }
+
+    /**
+     * بعد از یک حرکت: فقط ردیف‌های همان کالا (حداکثر سه مکان) دوباره خوانده
+     * می‌شود، نه ۱۵٬۰۰۰ ردیف. مجموع‌ها از همان فهرست جدید حساب می‌شوند.
+     */
+    suspend fun refreshStockForProduct(productId: ID) = withContext(Dispatchers.IO) {
+        val db = helper.readableDatabase
+        val rows = readLevelsForProduct(db, productId)
+        val next = ArrayList<StockLevel>(_levels.value.size + rows.size)
+        for (level in _levels.value) if (level.productId != productId) next.add(level)
+        next.addAll(rows)
+        publishLevels(next)
+        refreshMovements(db)
+    }
+
+    /** بعد از انبارگردانی: ردیف‌های همان مکان دوباره خوانده می‌شود. */
+    suspend fun refreshStockForLocation(locationId: ID) = withContext(Dispatchers.IO) {
+        val db = helper.readableDatabase
+        val rows = readLevelsForLocation(db, locationId)
+        val next = ArrayList<StockLevel>(_levels.value.size + rows.size)
+        for (level in _levels.value) if (level.locationId != locationId) next.add(level)
+        next.addAll(rows)
+        publishLevels(next)
+        refreshMovements(db)
+    }
+
+    private fun publishLevels(levels: List<StockLevel>) {
+        _levels.value = levels
+        _totals.value = productTotals(levels)
+    }
+
+    private fun refreshMovements(db: android.database.sqlite.SQLiteDatabase) {
         _movements.value = readMovements(db)
         _movementCount.value = readMovementCount(db)
     }
 
+    private fun buildIndex(
+        products: List<Product>,
+        brands: List<Brand>,
+        categories: List<Category>,
+    ): ProductSearchIndex = ProductSearchIndex(
+        products,
+        brands.associate { it.id to it.name },
+        categories.associate { it.id to it.name },
+    )
+
     suspend fun reloadLabels() = withContext(Dispatchers.IO) {
         val db = helper.readableDatabase
-        _brands.value = readBrands(db)
-        _categories.value = readCategories(db)
+        val brands = readBrands(db)
+        val categories = readCategories(db)
+        _brands.value = brands
+        _categories.value = categories
         _locations.value = readLocations(db)
+        _searchIndex.value = buildIndex(_products.value, brands, categories)
     }
 
     suspend fun reloadSettings() = withContext(Dispatchers.IO) {
@@ -139,6 +224,16 @@ class DataHub(private val helper: PlascoDb) {
             buildList { while (cursor.moveToNext()) add(cursor.toStockLevel()) }
         }
 
+    private fun readLevelsForProduct(db: android.database.sqlite.SQLiteDatabase, productId: ID): List<StockLevel> =
+        db.rawQuery("SELECT * FROM stockLevels WHERE productId = ?", arrayOf(productId)).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(cursor.toStockLevel()) }
+        }
+
+    private fun readLevelsForLocation(db: android.database.sqlite.SQLiteDatabase, locationId: ID): List<StockLevel> =
+        db.rawQuery("SELECT * FROM stockLevels WHERE locationId = ?", arrayOf(locationId)).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(cursor.toStockLevel()) }
+        }
+
     private fun readMovements(db: android.database.sqlite.SQLiteDatabase): List<Movement> =
         db.rawQuery("SELECT * FROM movements ORDER BY at DESC LIMIT $MOVEMENT_PAGE", null).use { cursor ->
             buildList { while (cursor.moveToNext()) add(cursor.toMovement()) }
@@ -166,10 +261,6 @@ class DataHub(private val helper: PlascoDb) {
         db.rawQuery("SELECT * FROM stockTakes WHERE deletedAt IS NULL ORDER BY createdAt DESC", null).use { cursor ->
             buildList { while (cursor.moveToNext()) add(cursor.toStockTake()) }
         }
-
-    fun productById(id: ID): Product? = _products.value.firstOrNull { it.id == id }
-
-    fun locationName(id: ID): String = _locations.value.firstOrNull { it.id == id }?.name ?: ""
 
     companion object {
         /** چند حرکت آخر در حافظه نگه داشته می‌شود. */

@@ -165,6 +165,7 @@ object Fa {
         const val applyHint = "برای هر کالایی که شمردی اختلاف حساب می‌شود و حرکات شمارش ثبت می‌شود."
         const val applyConfirm = "تعداد {count} کالا اصلاح می‌شود. مطمئنی؟"
         const val applied = "شمارش ثبت شد."
+        const val applying = "در حال ثبت…"
         const val revert = "برگرداندن این شمارش"
         const val revertConfirm = "این شمارش برگردانده می‌شود و دوباره باز می‌شود. مطمئنی؟"
         const val reverted = "شمارش برگردانده شد."

@@ -16,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -140,6 +141,7 @@ fun StockTakeScreen(onBack: () -> Unit) {
     // اعمال و بازگردانی مثل نسخهٔ وب اول پرسش «مطمئنی؟» دارند؛ اعمال تعداد کالاهای
     // متغیر را می‌گوید و بازگردانی هم توضیح می‌دهد که جلسه دوباره «باز» می‌شود.
     fun applyCounts() {
+        if (busy) return
         if (locations.none { it.id == locationId }) {
             showMessage(Fa.stocktake.pickLocation)
             return
@@ -184,134 +186,144 @@ fun StockTakeScreen(onBack: () -> Unit) {
         }
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        item {
-            ScreenHeader(
-                title = Fa.stocktake.title,
-                subtitle = if (resumeId != null) Fa.stocktake.resume else Fa.stocktake.applyHint,
-                onBack = onBack,
-                action = { OutlinedButton(onClick = { scanOpen = true }) { Text(Fa.scan.button) } },
-            )
-        }
-
-        item { SectionTitle(Fa.stocktake.location, Modifier.padding(horizontal = 12.dp)) }
-        item {
-            ChipRow(
-                options = locations.map { it.id to it.name },
-                selected = locationId,
-                onSelect = {
-                    locationId = it
-                    counts.clear()
-                    resumeId = null
-                },
-                modifier = Modifier.padding(horizontal = 12.dp),
-            )
-        }
-
-        if (active.isEmpty()) {
-            item { EmptyState(Fa.stocktake.empty) }
-        }
-
-        items(active, key = { it.id }) { product ->
-            val systemQty = atLocation[product.id] ?: 0
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(displayProductName(product.name), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
-                    Text(
-                        "${product.code} · ${Fa.movements.pieces}: ${formatNumber(systemQty)}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                // مقدار منفی معنادار نیست؛ همان‌جا کادر قرمز می‌شود (وب هم در
-                // «ذخیره» ردش می‌کند) — تا فقط در لحظهٔ «ثبت شمارش» معلوم نشود.
-                val text = counts[product.id].orEmpty()
-                val parsed = parseIntegerInput(text)
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { counts[product.id] = it },
-                    label = { Text(Fa.stocktake.counted) },
-                    isError = text.isNotBlank() && (parsed == null || parsed < 0),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    textStyle = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.width(120.dp),
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            item {
+                ScreenHeader(
+                    title = Fa.stocktake.title,
+                    subtitle = if (resumeId != null) Fa.stocktake.resume else Fa.stocktake.applyHint,
+                    onBack = onBack,
+                    action = { OutlinedButton(onClick = { scanOpen = true }) { Text(Fa.scan.button) } },
                 )
             }
-        }
 
-        item {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    Fa.stocktake.deltaCount.replace("{count}", formatNumber(changes)),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
+            item { SectionTitle(Fa.stocktake.location, Modifier.padding(horizontal = 12.dp)) }
+            item {
+                ChipRow(
+                    options = locations.map { it.id to it.name },
+                    selected = locationId,
+                    onSelect = {
+                        locationId = it
+                        counts.clear()
+                        resumeId = null
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp),
                 )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    enabled = !busy && counted.isNotEmpty(),
-                    onClick = { confirmApply = true },
+            }
+
+            if (active.isEmpty()) {
+                item { EmptyState(Fa.stocktake.empty) }
+            }
+
+            items(active, key = { it.id }) { product ->
+                val systemQty = atLocation[product.id] ?: 0
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (busy) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Text(Fa.stocktake.applying)
-                    } else {
-                        Text(Fa.stocktake.apply)
-                    }
-                }
-            }
-        }
-
-        item { SectionTitle(Fa.stocktake.history, Modifier.padding(horizontal = 12.dp)) }
-        if (stockTakes.isEmpty()) {
-            item { EmptyState(Fa.stocktake.historyEmpty) }
-        }
-        items(stockTakes, key = { it.id }) { take ->
-            Panel(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
+                        Text(displayProductName(product.name), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
                         Text(
-                            locations.firstOrNull { it.id == take.locationId }?.name ?: Fa.common.unknown,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                        Text(
-                            formatJalali(take.appliedAt ?: take.updatedAt) + " · " + when (take.status) {
-                                StockTakeStatus.Applied -> Fa.stocktake.statusApplied
-                                StockTakeStatus.Open -> Fa.stocktake.statusOpen
-                                StockTakeStatus.Cancelled -> Fa.stocktake.statusCancelled
-                            },
+                            "${product.code} · ${Fa.movements.pieces}: ${formatNumber(systemQty)}",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    when (take.status) {
-                        StockTakeStatus.Applied -> OutlinedButton(
-                            enabled = !busy,
-                            onClick = { revertId = take.id },
-                        ) { Text(Fa.stocktake.revert) }
-                        // جلسهٔ نیمه‌کاره (برگردانده‌شده) را همین‌جا می‌شود ادامه داد:
-                        // مکان و شمارش‌های قبلی‌اش برمی‌گردند و دوباره ثبت می‌شود.
-                        StockTakeStatus.Open -> OutlinedButton(
-                            enabled = !busy,
-                            onClick = {
-                                scope.launch {
-                                    val saved = container.stock.itemsOf(take.id)
-                                    locationId = take.locationId
-                                    counts.clear()
-                                    // همهٔ شمارش‌های جلسه برمی‌گردند — حتی کالایی که
-                                    // از آن موقع غیرفعال شده؛ وب هم آیتم‌ها را
-                                    // بی‌فیلتر برمی‌گرداند و در «ثبت شمارش» حساب می‌کند.
-                                    saved.forEach { counts[it.productId] = it.counted.toString() }
-                                    resumeId = take.id
-                                }
-                            },
-                        ) { Text(Fa.stocktake.resume) }
-                        StockTakeStatus.Cancelled -> Unit
+                    Spacer(Modifier.width(8.dp))
+                    // مقدار منفی معنادار نیست؛ همان‌جا کادر قرمز می‌شود (وب هم در
+                    // «ذخیره» ردش می‌کند) — تا فقط در لحظهٔ «ثبت شمارش» معلوم نشود.
+                    val text = counts[product.id].orEmpty()
+                    val parsed = parseIntegerInput(text)
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { counts[product.id] = it },
+                        label = { Text(Fa.stocktake.counted) },
+                        isError = text.isNotBlank() && (parsed == null || parsed < 0),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        textStyle = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.width(120.dp),
+                    )
+                }
+            }
+
+            item { SectionTitle(Fa.stocktake.history, Modifier.padding(horizontal = 12.dp)) }
+            if (stockTakes.isEmpty()) {
+                item { EmptyState(Fa.stocktake.historyEmpty) }
+            }
+            items(stockTakes, key = { it.id }) { take ->
+                Panel(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                locations.firstOrNull { it.id == take.locationId }?.name ?: Fa.common.unknown,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                formatJalali(take.appliedAt ?: take.updatedAt) + " · " + when (take.status) {
+                                    StockTakeStatus.Applied -> Fa.stocktake.statusApplied
+                                    StockTakeStatus.Open -> Fa.stocktake.statusOpen
+                                    StockTakeStatus.Cancelled -> Fa.stocktake.statusCancelled
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        when (take.status) {
+                            StockTakeStatus.Applied -> OutlinedButton(
+                                enabled = !busy,
+                                onClick = { revertId = take.id },
+                            ) { Text(Fa.stocktake.revert) }
+                            // جلسهٔ نیمه‌کاره (برگردانده‌شده) را همین‌جا می‌شود ادامه داد:
+                            // مکان و شمارش‌های قبلی‌اش برمی‌گردند و دوباره ثبت می‌شود.
+                            StockTakeStatus.Open -> OutlinedButton(
+                                enabled = !busy,
+                                onClick = {
+                                    scope.launch {
+                                        val saved = container.stock.itemsOf(take.id)
+                                        locationId = take.locationId
+                                        counts.clear()
+                                        // همهٔ شمارش‌های جلسه برمی‌گردند — حتی کالایی که
+                                        // از آن موقع غیرفعال شده؛ وب هم آیتم‌ها را
+                                        // بی‌فیلتر برمی‌گرداند و در «ثبت شمارش» حساب می‌کند.
+                                        saved.forEach { counts[it.productId] = it.counted.toString() }
+                                        resumeId = take.id
+                                    }
+                                },
+                            ) { Text(Fa.stocktake.resume) }
+                            StockTakeStatus.Cancelled -> Unit
+                        }
+                    }
+                }
+            }
+        }
+        // ثبت شمارش همیشه در دسترس است؛ قبلاً ته فهرست ۵٬۰۰۰ کالایی بود و
+        // عملاً پیدا نمی‌شد. هر وقت شمارشی هست، نوار بالای ناوبری می‌ماند.
+        if (counted.isNotEmpty() || busy) {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
+                shadowElevation = 6.dp,
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                    Text(
+                        Fa.stocktake.deltaCount.replace("{count}", formatNumber(changes)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        enabled = !busy && counted.isNotEmpty(),
+                        onClick = { confirmApply = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (busy) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(Fa.stocktake.applying)
+                        } else {
+                            Text(Fa.stocktake.apply)
+                        }
                     }
                 }
             }

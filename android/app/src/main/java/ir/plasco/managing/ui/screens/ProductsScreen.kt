@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -88,6 +89,15 @@ fun ProductsScreen(
                 (categoryFilter.isEmpty() || product.categoryId == categoryFilter)
         }
     }
+    // با هر پرس‌وجو/فیلتر تازه از بالای فهرست شروع می‌شود، ولی برگشتن به تب
+    // همان جای قبلی را نگه می‌دارد (کلیدها عوض نشده‌اند).
+    val listState = rememberSaveable(
+        settledQuery,
+        locationFilter,
+        brandFilter,
+        categoryFilter,
+        saver = LazyListState.Saver,
+    ) { LazyListState() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ScreenHeader(
@@ -125,7 +135,7 @@ fun ProductsScreen(
                 }
             }
         }
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
             if (products.isEmpty()) {
                 item { EmptyState(Fa.products.empty, Fa.products.newProduct, onNewProduct) }
             } else if (filtered.isEmpty()) {

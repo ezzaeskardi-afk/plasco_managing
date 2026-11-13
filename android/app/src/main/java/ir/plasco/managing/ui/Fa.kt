@@ -209,6 +209,7 @@ object Fa {
         const val name = "نام"
         const val removeConfirm = "«{name}» حذف شود؟"
         const val removed = "حذف شد"
+        const val locationHasStock = "این مکان {qty} عدد موجودی دارد؛ اول موجودی را جابه‌جا کن."
         const val data = "داده‌ها و بکاپ"
         const val dataHint = "فایل بکاپ ZIP بساز و همان فایل نسخهٔ وب را هم اینجا باز کن."
         const val lastBackup = "آخرین بکاپ"

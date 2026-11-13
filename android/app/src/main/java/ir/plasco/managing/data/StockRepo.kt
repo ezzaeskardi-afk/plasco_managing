@@ -144,6 +144,12 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
             // یک بار همهٔ ردیف‌های این مکان خوانده می‌شود؛ بعد برای هر کالا فقط
             // از حافظه می‌خوانیم.
             val currentAtLocation: Map<ID, StockLevel> = levelsAtLocation(db, locationId)
+            // کالای حذف‌شده دیگر موجودی نمی‌گیرد؛ همان قاعدهٔ `liveIds` نسخهٔ وب.
+            // ردیف شمارش در تاریخچه می‌ماند، ولی برایش حرکت `count` نوشته نمی‌شود.
+            val liveProductIds: Set<ID> = db.rawQuery(
+                "SELECT id FROM products WHERE deletedAt IS NULL",
+                null,
+            ).use { cursor -> buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) } }
             for ((productId, counted) in counts) {
                 val current = currentAtLocation[productId]
                 db.insertOrThrow(
@@ -159,7 +165,7 @@ class StockRepo(private val helper: PlascoDb, private val hub: DataHub) {
                     },
                 )
                 val delta = counted - (current?.qty ?: 0)
-                if (delta != 0) {
+                if (delta != 0 && productId in liveProductIds) {
                     // ردیف موجودی همین الان خوانده شده؛ دیگر لازم نیست برای هر کالا
                     // یک SELECT جداگانه بزنیم (قبلاً ۵٬۰۰۰ کالا یعنی ۵٬۰۰۰ کوئری).
                     writeMovement(

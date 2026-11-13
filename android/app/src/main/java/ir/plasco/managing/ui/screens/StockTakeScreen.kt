@@ -81,6 +81,10 @@ fun StockTakeScreen(onBack: () -> Unit) {
     var resumeId by remember { mutableStateOf<ID?>(null) }
 
     val active = remember(products) { products.filter { it.active } }
+    // کالاهای زنده (حذف‌نشده)؛ همان قاعدهٔ `listProducts` نسخهٔ وب. کالایی که
+    // وسط شمارش حذف شده، شمارشش در تاریخچه می‌ماند ولی در شمارندهٔ تغییرات
+    // و حرکت `count` حساب نمی‌شود.
+    val liveIds = remember(products) { products.mapTo(HashSet()) { it.id } }
     val atLocation = remember(levels, locationId) {
         levels.filter { it.locationId == locationId }.associate { it.productId to it.qty }
     }
@@ -111,8 +115,10 @@ fun StockTakeScreen(onBack: () -> Unit) {
     }
 
     // تعداد کالاهایی که واقعاً عوض می‌شوند — همان هشداری که نسخهٔ وب می‌دهد.
-    val changes = remember(counted, atLocation) {
-        counted.count { (productId, count) -> (atLocation[productId] ?: 0) != count }
+    val changes = remember(counted, atLocation, liveIds) {
+        counted.count { (productId, count) ->
+            productId in liveIds && (atLocation[productId] ?: 0) != count
+        }
     }
 
     // ثبت شمارش همان کالایی که همین حالا خوانده شد؛ «و بارکد بعدی» دوربین را بازمی‌گرداند.

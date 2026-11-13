@@ -10,6 +10,9 @@ import ir.plasco.managing.model.Location
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** مکان هنوز موجودی دارد؛ مثل نسخهٔ وب تا خالی نشود پنهان نمی‌شود. */
+class LocationHasStockException(val qty: Long) : Exception("LocationHasStock")
+
 /** برندها، دسته‌ها و مکان‌ها — همان سه فهرست سادهٔ نسخهٔ وب. */
 class LabelRepo(private val helper: PlascoDb, private val hub: DataHub) {
 
@@ -83,7 +86,31 @@ class LabelRepo(private val helper: PlascoDb, private val hub: DataHub) {
 
     suspend fun removeCategory(id: ID) = softDelete("categories", id).also { hub.reloadLabels() }
 
-    suspend fun removeLocation(id: ID) = softDelete("locations", id).also { hub.reloadLabels() }
+    /**
+     * مکانِ هنوز دارای موجودی پنهان نمی‌شود (همان `LocationHasStockError` وب):
+     * وگرنه عدد از جمع‌ها بیرون می‌افتد و قفسه از همهٔ فهرست‌ها ناپدید می‌شود.
+     * بررسی و حذف در یک تراکنش انجام می‌شود.
+     */
+    suspend fun removeLocation(id: ID) {
+        inTransaction { db ->
+            val held = db.rawQuery(
+                "SELECT COALESCE(SUM(ABS(qty)), 0) FROM stockLevels WHERE locationId = ?",
+                arrayOf(id),
+            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+            if (held > 0L) throw LocationHasStockException(held)
+            val now = System.currentTimeMillis()
+            db.update(
+                "locations",
+                ContentValues().apply {
+                    put("deletedAt", now)
+                    put("updatedAt", now)
+                },
+                "id = ?",
+                arrayOf(id),
+            )
+        }
+        hub.reloadLabels()
+    }
 
     private suspend fun softDelete(table: String, id: ID) {
         inTransaction { db ->

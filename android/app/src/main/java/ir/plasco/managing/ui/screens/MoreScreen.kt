@@ -246,12 +246,18 @@ fun MoreScreen(onOpenStockTake: () -> Unit, onOpenData: () -> Unit) {
                     onClick = {
                         pendingRemove = null
                         scope.launch {
-                            when (pending.kind) {
-                                LabelKind.Brand -> container.labels.removeBrand(pending.id)
-                                LabelKind.Category -> container.labels.removeCategory(pending.id)
-                                LabelKind.Location -> container.labels.removeLocation(pending.id)
+                            try {
+                                when (pending.kind) {
+                                    LabelKind.Brand -> container.labels.removeBrand(pending.id)
+                                    LabelKind.Category -> container.labels.removeCategory(pending.id)
+                                    LabelKind.Location -> container.labels.removeLocation(pending.id)
+                                }
+                                showMessage(Fa.more.removed)
+                            } catch (error: Throwable) {
+                                // مکانِ دارای موجودی حذف نمی‌شود؛ دلیلش با تعداد
+                                // همین‌جا گفته می‌شود (مثل توست نسخهٔ وب).
+                                showMessage(messageFor(error))
                             }
-                            showMessage(Fa.more.removed)
                         }
                     },
                 ) { Text(Fa.common.delete, color = toneColor(StockState.Out)) }

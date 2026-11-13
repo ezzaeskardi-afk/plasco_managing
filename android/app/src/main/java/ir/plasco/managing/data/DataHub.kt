@@ -263,7 +263,7 @@ class DataHub(private val helper: PlascoDb) {
         }
 
     companion object {
-        /** چند حرکت آخر در حافظه نگه داشته می‌شود. */
-        const val MOVEMENT_PAGE = 400
+        /** چند حرکت آخر در حافظه نگه داشته می‌شود — همان ۵۰۰ حرکت صفحهٔ وب. */
+        const val MOVEMENT_PAGE = 500
     }
 }

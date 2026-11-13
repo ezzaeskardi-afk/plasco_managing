@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.plasco.managing.data.InsufficientStockException
+import ir.plasco.managing.data.LocationHasStockException
 import ir.plasco.managing.data.NewProduct
 import ir.plasco.managing.domain.findProductByBarcode
 import ir.plasco.managing.domain.displayProductName
@@ -427,5 +428,9 @@ internal fun messageFor(error: Throwable): String = when {
     error.message?.contains("AlreadyUndone") == true -> Fa.errors.alreadyUndone
     error.message?.contains("TransferSameLocation") == true -> Fa.movements.transferSame
     error.message?.contains("StockTakeEmpty") == true -> Fa.stocktake.nothingCounted
+    error.message?.contains("LocationHasStock") == true -> {
+        val qty = (error as? LocationHasStockException)?.qty ?: 0L
+        Fa.more.locationHasStock.replace("{qty}", formatNumber(qty))
+    }
     else -> error.message ?: Fa.errors.failed
 }

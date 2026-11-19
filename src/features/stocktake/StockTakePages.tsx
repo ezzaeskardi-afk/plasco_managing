@@ -44,7 +44,7 @@ export function StockTakeListPage() {
       {!sessions || sessions.length === 0 ? (
         <EmptyState message={fa.empty.stockTakes} />
       ) : (
-        <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
+        <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-paper">
           {[...sessions]
             .sort((a, b) => b.createdAt - a.createdAt)
             .map((session) => (
@@ -351,7 +351,7 @@ export function StockTakeCountPage() {
       {/* Virtualized: a location can hold thousands of products. */}
       <div
         ref={scrollRef}
-        className="h-[60dvh] overflow-y-auto overscroll-contain rounded-input border border-line bg-paper"
+        className="h-[60dvh] overflow-y-auto overscroll-contain rounded-card border border-line bg-paper"
       >
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => {
@@ -638,7 +638,7 @@ export function StockTakeReviewPage() {
       {differences.length === 0 ? (
         <p className="mb-4 text-crate">{fa.stocktake.noDifferences}</p>
       ) : (
-        <ul className="mb-4 max-h-[55dvh] divide-y divide-line overflow-y-auto overscroll-contain rounded-input border border-line bg-paper">
+        <ul className="mb-4 max-h-[55dvh] divide-y divide-line overflow-y-auto overscroll-contain rounded-card border border-line bg-paper">
           {differences.map((row) => (
             <li key={row.item.id} className="flex items-center gap-3 p-3">
               <div className="min-w-0 flex-1">
@@ -662,7 +662,7 @@ export function StockTakeReviewPage() {
       )}
 
       {uncounted.length > 0 ? (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-input border border-line bg-paper p-3">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-card border border-line bg-paper p-3">
           <div>
             <p className="text-ink">{fa.stocktake.treatUncountedAsZero}</p>
             <p className="text-[0.8rem] text-crate">
@@ -700,7 +700,7 @@ export function StockTakeReviewPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-input border border-line bg-paper p-3">
+    <div className="rounded-card border border-line bg-paper p-3">
       <p className="text-[0.8rem] text-crate">{label}</p>
       <p className="tnum font-bold text-ink">{value}</p>
     </div>

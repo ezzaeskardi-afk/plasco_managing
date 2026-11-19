@@ -15,15 +15,15 @@ export function Badge({
 }) {
   const tones: Record<string, string> = {
     neutral: 'bg-frost text-crate',
-    ok: 'bg-frost text-ok',
-    low: 'bg-frost text-low',
-    out: 'bg-frost text-out',
-    basin: 'bg-frost text-basin',
+    ok: 'bg-ok/10 text-ok',
+    low: 'bg-low/10 text-low',
+    out: 'bg-out/10 text-out',
+    basin: 'bg-basin/10 text-basin',
   };
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.8rem] leading-6',
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.8rem] font-medium leading-6',
         tones[tone],
         className,
       )}
@@ -90,7 +90,7 @@ export function Select({
       <SelectPrimitive.Trigger
         id={id}
         className={cn(
-          'flex h-12 w-full items-center justify-between gap-2 rounded-input border border-line bg-paper px-3 text-start text-ink data-[placeholder]:text-crate',
+          'flex h-12 w-full items-center justify-between gap-2 rounded-input border border-line bg-paper px-3 text-start text-ink transition-none data-[placeholder]:text-crate hover:border-crate/40 focus:border-basin',
           className,
         )}
       >
@@ -151,7 +151,9 @@ export function Segmented<T extends string>({
           onClick={() => onChange(option.value)}
           className={cn(
             'h-10 flex-1 rounded-[8px] px-3 text-sm',
-            value === option.value ? 'bg-basin text-basin-ink' : 'text-crate',
+            value === option.value
+              ? 'bg-basin font-semibold text-basin-ink'
+              : 'text-crate hover:text-ink',
           )}
         >
           {option.label}
@@ -171,13 +173,13 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-4 px-6 py-16 text-center">
+    <div className="mx-auto flex w-full max-w-md flex-col items-center gap-4 rounded-card border border-dashed border-line bg-paper/60 px-6 py-14 text-center">
       {icon ? (
-        <div className="flex size-14 items-center justify-center rounded-full bg-frost text-crate">
+        <div className="flex size-16 items-center justify-center rounded-full bg-frost text-crate ring-1 ring-line">
           {icon}
         </div>
       ) : null}
-      <p className="max-w-[26rem] text-crate">{message}</p>
+      <p className="max-w-[26rem] text-[0.95rem] leading-relaxed text-crate">{message}</p>
       {action}
     </div>
   );

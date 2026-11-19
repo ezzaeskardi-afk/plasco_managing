@@ -130,7 +130,7 @@ export function MovementsPage() {
       ) : movements.length === 0 ? (
         <EmptyState message={fa.empty.movementsFiltered} />
       ) : (
-        <ul className="overflow-hidden rounded-input border border-line bg-paper">
+        <ul className="overflow-hidden rounded-card border border-line bg-paper">
           {movements.map((movement) => {
             const product = productMap.get(movement.productId);
             return (

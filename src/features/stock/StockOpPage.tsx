@@ -268,7 +268,7 @@ export function StockOpPage() {
   return (
     <div className="mx-auto max-w-[720px] pb-10">
       {product ? (
-        <div className="mb-4 flex items-center gap-3 rounded-input border border-line bg-paper p-3">
+        <div className="mb-4 flex items-center gap-3 rounded-card border border-line bg-paper p-3">
           <ProductThumb productId={product.id} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-ink">{displayProductName(product.name)}</p>
@@ -308,7 +308,7 @@ export function StockOpPage() {
             <p className="mt-2 text-crate">{fa.empty.search}</p>
           ) : null}
           {results.length > 0 ? (
-            <ul className="mt-2 max-h-72 overflow-y-auto overscroll-contain rounded-input border border-line bg-paper">
+            <ul className="mt-2 max-h-72 overflow-y-auto overscroll-contain rounded-card border border-line bg-paper">
               {results.map((item) => (
                 <li key={item.id}>
                   <button
@@ -364,7 +364,7 @@ export function StockOpPage() {
       ) : null}
 
       {op === 'adjust' ? (
-        <div className="mb-4 rounded-input border border-line bg-paper p-4">
+        <div className="mb-4 rounded-card border border-line bg-paper p-4">
           <Label htmlFor="targetQty">{fa.stock.adjustTarget}</Label>
           <Input
             id="targetQty"
@@ -376,7 +376,7 @@ export function StockOpPage() {
           <p className="mt-2 text-[0.8rem] text-crate">{fa.stock.adjustHelp}</p>
         </div>
       ) : (
-        <div className="mb-4 rounded-input border border-line bg-paper p-4">
+        <div className="mb-4 rounded-card border border-line bg-paper p-4">
           <CartonInput
             key={product?.id ?? 'none'}
             value={qty}

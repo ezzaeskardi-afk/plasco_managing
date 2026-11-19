@@ -202,7 +202,7 @@ export function DataPage() {
             {batches.map((batch) => (
               <li
                 key={batch.id}
-                className="flex flex-wrap items-center gap-2 rounded-input border border-line bg-paper p-3"
+                className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-paper p-3"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-ink">

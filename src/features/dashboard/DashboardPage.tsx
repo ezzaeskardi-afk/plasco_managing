@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
+  AlertTriangle,
   ArrowLeftRight,
   Boxes,
   ChevronLeft,
@@ -106,8 +107,13 @@ export function DashboardPage() {
   return (
     <div>
       {backupStale ? (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-input border border-low bg-paper p-3">
-          <p className="text-[0.9rem] text-ink">{fa.dashboard.lastBackupWarning}</p>
+        <div className="mb-5 flex items-center justify-between gap-3 rounded-card border border-line border-s-4 border-s-low bg-paper p-3 ps-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-low/10 text-low">
+              <AlertTriangle className="size-4" />
+            </span>
+            <p className="text-[0.9rem] text-ink">{fa.dashboard.lastBackupWarning}</p>
+          </div>
           <Button size="sm" variant="secondary" onClick={() => navigate('/more/data')}>
             <Download className="size-4" />
             {fa.dashboard.backupNow}
@@ -116,7 +122,7 @@ export function DashboardPage() {
       ) : null}
 
       {/* One surface, 2x2 numerals - not four separate cards. */}
-      <Panel className="mb-4 grid grid-cols-2 gap-2">
+      <Panel className="mb-5 grid grid-cols-2 gap-1 p-2 sm:gap-2 sm:p-3">
         <KpiCell
           icon={Boxes}
           label={fa.dashboard.pieces}
@@ -149,26 +155,30 @@ export function DashboardPage() {
           onClick={() => navigate('/products?sort=value')}
           node={<MoneyText value={summary.retail} className="whitespace-nowrap text-[1.6rem] font-extrabold sm:text-[2rem]" compact showLabel={false} />}
         />
-        <div className="col-span-2 flex items-center justify-between border-t border-line pt-3">
+        <div className="col-span-2 mt-1 flex items-center justify-between rounded-input bg-frost px-3 py-2.5">
           <span className="flex items-center gap-1.5 text-crate">
             <TrendingUp className="size-4" />
             {fa.dashboard.potentialProfit}
           </span>
-          <MoneyText value={summary.potentialProfit} className="text-title font-bold text-ok" />
+          <MoneyText value={summary.potentialProfit} className="text-title font-extrabold text-ok" />
         </div>
       </Panel>
 
       <Section title={fa.dashboard.quickTitle}>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-2.5">
           {QUICK_ACTIONS.map((action) => (
             <button
               key={action.to}
               type="button"
               onClick={() => navigate(action.to)}
-              className="flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-input border border-line bg-paper px-1 py-3 text-ink transition-colors hover:border-basin"
+              className="flex min-h-[5.5rem] flex-col items-center justify-center gap-2 rounded-card border border-line bg-paper px-1 py-3 text-ink hover:border-basin/40 hover:bg-frost/60"
             >
-              <action.icon className="size-6 text-basin" />
-              <span className="text-center text-[0.8rem] leading-snug">{action.label}</span>
+              <span className="flex size-10 items-center justify-center rounded-full bg-basin/10 text-basin">
+                <action.icon className="size-5" />
+              </span>
+              <span className="text-center text-[0.8rem] font-medium leading-snug">
+                {action.label}
+              </span>
             </button>
           ))}
         </div>
@@ -178,7 +188,7 @@ export function DashboardPage() {
         {alerts.low.length === 0 ? (
           <p className="text-crate">{fa.dashboard.lowStockEmpty}</p>
         ) : (
-          <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
+          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-paper">
             {alerts.low.slice(0, 8).map((row) => (
               <ProductAlertRow
                 key={row.product.id}
@@ -197,7 +207,7 @@ export function DashboardPage() {
         {alerts.out.length === 0 ? (
           <p className="text-crate">{fa.dashboard.outOfStockEmpty}</p>
         ) : (
-          <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
+          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-paper">
             {alerts.out.slice(0, 8).map((row) => (
               <ProductAlertRow
                 key={row.product.id}
@@ -223,7 +233,7 @@ export function DashboardPage() {
         {(movements ?? []).length === 0 ? (
           <p className="text-crate">{fa.dashboard.recentEmpty}</p>
         ) : (
-          <ul className="overflow-hidden rounded-input border border-line bg-paper">
+          <ul className="overflow-hidden rounded-card border border-line bg-paper">
             {(movements ?? []).map((movement) => (
               <MovementRow
                 key={movement.id}
@@ -264,7 +274,7 @@ export function DashboardPage() {
         </Section>
       </div>
 
-      <p className="mt-8 text-center text-[0.8rem] text-crate">
+      <p className="mt-10 text-center text-[0.8rem] text-crate">
         {fa.settings.version} {APP_VERSION}
       </p>
     </div>
@@ -286,10 +296,10 @@ function KpiCell({
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-start gap-1 rounded-input p-2 text-start transition-colors hover:bg-frost"
+      className="flex flex-col items-start gap-1 rounded-input p-3 text-start hover:bg-frost"
     >
       <span className="flex items-center gap-1.5 text-[0.9rem] text-crate">
-        <Icon className="size-4 shrink-0" />
+        <Icon className="size-4 shrink-0 text-basin/80" />
         {label}
       </span>
       {node}
@@ -311,29 +321,31 @@ function Breakdown({
   if (groups.length === 0) return <p className="text-crate">{fa.common.none}</p>;
   const max = Math.max(...groups.map((g) => g.retail), 1);
   return (
-    <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
+    <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-paper">
       {groups.map((group) => (
         <li key={group.id}>
           <button
             type="button"
             onClick={() => onPick(group.id)}
-            className="flex w-full items-center gap-3 p-3 text-start"
+            className="flex w-full items-center gap-3 px-4 py-3.5 text-start hover:bg-frost/60"
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-ink">{names.get(group.id) ?? fa.common.unknown}</span>
-                <span className="tnum shrink-0 text-[0.9rem] text-crate">
+                <span className="truncate font-medium text-ink">
+                  {names.get(group.id) ?? fa.common.unknown}
+                </span>
+                <span className="tnum shrink-0 text-[0.8rem] text-crate">
                   {formatQty(group.pieces)} {fa.common.pieces}
                 </span>
               </div>
-              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-frost">
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-frost">
                 <div
                   className="h-full rounded-full bg-basin"
                   style={{ width: `${Math.max(4, (group.retail / max) * 100)}%` }}
                 />
               </div>
               {costVisible ? (
-                <div className="mt-1 text-[0.8rem] text-crate">
+                <div className="mt-1.5 text-[0.8rem] text-crate">
                   <MoneyText value={group.retail} />
                 </div>
               ) : null}
@@ -361,14 +373,14 @@ function ProductAlertRow({
 }) {
   return (
     <li>
-      <button type="button" onClick={onOpen} className="flex min-h-16 w-full items-center gap-3 px-3">
+      <button type="button" onClick={onOpen} className="flex min-h-16 w-full items-center gap-3 px-4 hover:bg-frost/60">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-ink">{name}</p>
-          <p dir="ltr" className="text-start text-[0.9rem] text-crate">
+          <p className="truncate font-medium text-ink">{name}</p>
+          <p dir="ltr" className="text-start text-[0.8rem] text-crate">
             {code}
           </p>
         </div>
-        <span className="tnum text-title font-extrabold text-ink">{formatQty(total)}</span>
+        <span className="tnum min-w-10 text-end text-title font-extrabold text-ink">{formatQty(total)}</span>
         <StockStack total={total} minStock={minStock} />
       </button>
     </li>

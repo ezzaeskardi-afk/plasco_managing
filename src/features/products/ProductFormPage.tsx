@@ -386,7 +386,7 @@ export function ProductFormPage() {
           />
         </div>
         {!isEdit ? (
-          <div className="rounded-input border border-line bg-paper p-4">
+          <div className="rounded-card border border-line bg-paper p-4">
             <Label>{fa.products.openingQty}</Label>
             <QuantityInput
               value={openingPieces}
@@ -409,7 +409,7 @@ export function ProductFormPage() {
       </Section>
 
       <Section title={fa.products.sectionMedia}>
-        <div className="mb-4 rounded-input border border-line bg-paper p-4">
+        <div className="mb-4 rounded-card border border-line bg-paper p-4">
           <Label>{fa.common.photo}</Label>
           <div className="mt-2 flex items-center gap-3">
             {photoSrc ? (

@@ -1,8 +1,9 @@
 /* Design tokens - AGENTS.md section 8. Values only; semantic mapping lives in index.css. */
 :root {
-  --frost: #f1f5f6;
+  color-scheme: light;
+  --frost: #f2f6f7;
   --paper: #ffffff;
-  --line: #dce4e7;
+  --line: #dde5e8;
   --ink: #12202a;
   --crate: #51626e;
   --basin: #0b7285;
@@ -10,23 +11,27 @@
   --ok: #1f7a4d;
   --low: #b45309;
   --out: #c0262d;
+  --out-ink: #ffffff;
   --radius-input: 10px;
+  --radius-card: 14px;
   --radius-sheet: 20px;
   --radius-thumb: 12px;
   --text-scale: 1;
 }
 
 .dark {
-  --frost: #0e161b;
-  --paper: #151f26;
-  --line: #26343d;
-  --ink: #e7eef1;
-  --crate: #9db0bb;
+  color-scheme: dark;
+  --frost: #0d151a;
+  --paper: #162128;
+  --line: #2a3a44;
+  --ink: #e8eff2;
+  --crate: #a0b3bd;
   --basin: #4db6c8;
   --basin-ink: #06222a;
   --ok: #4cc38a;
   --low: #f0a04b;
   --out: #f2777c;
+  --out-ink: #2b0d10;
 }
 
 html {

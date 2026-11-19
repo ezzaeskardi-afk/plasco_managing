@@ -26,7 +26,7 @@ export function KpiBlock({
         setFull((prev) => !prev);
         onClick?.();
       }}
-      className="flex flex-col items-start gap-1 rounded-input p-2 text-start"
+      className="flex flex-col items-start gap-1 rounded-input p-2 text-start hover:bg-frost"
     >
       <span className="text-[0.9rem] text-crate">{label}</span>
       <span className="tnum text-[2rem] font-extrabold leading-tight text-ink">
@@ -83,9 +83,9 @@ export function Section({
   className?: string;
 }) {
   return (
-    <section className={cn('mb-6', className)}>
+    <section className={cn('mb-7', className)}>
       {title ? (
-        <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-title font-bold text-ink">{title}</h2>
           {action}
         </div>
@@ -97,6 +97,6 @@ export function Section({
 
 export function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('rounded-input border border-line bg-paper p-4', className)}>{children}</div>
+    <div className={cn('rounded-card border border-line bg-paper p-4', className)}>{children}</div>
   );
 }

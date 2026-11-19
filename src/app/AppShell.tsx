@@ -41,8 +41,8 @@ function RailLink({ to, label, icon: Icon }: { to: string; label: string; icon: 
       end={to === '/'}
       className={({ isActive }) =>
         cn(
-          'flex h-12 items-center gap-3 rounded-input px-3 text-ink',
-          isActive && 'bg-frost text-basin',
+          'flex h-12 items-center gap-3 rounded-input px-3 text-crate hover:bg-frost hover:text-ink',
+          isActive && 'bg-basin/10 font-semibold text-basin hover:bg-basin/10 hover:text-basin',
         )
       }
     >
@@ -59,13 +59,24 @@ function BottomLink({ to, label, icon: Icon }: { to: string; label: string; icon
       end={to === '/'}
       className={({ isActive }) =>
         cn(
-          'flex h-16 flex-col items-center justify-center gap-1 text-[0.8rem]',
+          'flex h-16 flex-col items-center justify-center gap-0.5 text-[0.8rem]',
           isActive ? 'text-basin' : 'text-crate',
         )
       }
     >
-      <Icon className="size-6" />
-      <span>{label}</span>
+      {({ isActive }) => (
+        <>
+          <span
+            className={cn(
+              'flex h-7 w-12 items-center justify-center rounded-full',
+              isActive && 'bg-basin/10',
+            )}
+          >
+            <Icon className="size-5" />
+          </span>
+          <span className={cn(isActive && 'font-semibold')}>{label}</span>
+        </>
+      )}
     </NavLink>
   );
 }
@@ -84,10 +95,12 @@ function AddSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: 
                 onOpenChange(false);
                 navigate(action.to);
               }}
-              className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-input border border-line bg-paper p-3 text-ink"
+              className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-card border border-line bg-paper p-3 text-ink hover:border-basin/40 hover:bg-frost/60"
             >
-              <action.icon className="size-6 text-basin" />
-              <span className="text-sm">{action.label}</span>
+              <span className="flex size-10 items-center justify-center rounded-full bg-basin/10 text-basin">
+                <action.icon className="size-5" />
+              </span>
+              <span className="text-[0.9rem] font-medium">{action.label}</span>
             </button>
           ))}
         </div>
@@ -101,14 +114,16 @@ export function AppShell() {
 
   return (
     <div className="min-h-[100dvh] bg-frost">
-      <aside className="fixed inset-y-0 start-0 z-30 hidden w-60 flex-col gap-2 border-e border-line bg-paper p-4 lg:flex">
-        <div className="mb-2 flex items-center gap-2 px-3 py-2">
-          <Box className="size-6 text-basin" />
+      <aside className="fixed inset-y-0 start-0 z-30 hidden w-60 flex-col gap-1.5 border-e border-line bg-paper p-3 lg:flex">
+        <div className="mb-3 flex items-center px-1 py-1">
+          <span className="flex size-10 items-center justify-center rounded-input bg-basin/10 text-basin">
+            <Box className="size-5" />
+          </span>
         </div>
         {[HOME_NAV, PRODUCTS_NAV, MOVEMENTS_NAV, MORE_NAV].map((item) => (
           <RailLink key={item.to} {...item} />
         ))}
-        <div className="mt-auto">
+        <div className="mt-auto border-t border-line pt-3">
           <RailLink to="/more/settings" label={fa.settings.title} icon={SettingsIcon} />
         </div>
       </aside>
@@ -116,7 +131,7 @@ export function AppShell() {
       {/* No page-title bar anywhere: the user asked for no name at the top of
           any page — the rail, the bottom nav and the content already say where
           you are (§11.23). */}
-      <main className="mx-auto w-full max-w-[1200px] px-4 pb-28 pt-[calc(env(safe-area-inset-top)+1.5rem)] lg:pb-10 lg:ps-64">
+      <main className="mx-auto w-full max-w-[1200px] px-4 pb-28 pt-[calc(env(safe-area-inset-top)+1.25rem)] sm:px-6 lg:pb-12 lg:pe-8 lg:ps-64 lg:pt-8">
         <Outlet />
       </main>
 
@@ -128,7 +143,7 @@ export function AppShell() {
             type="button"
             aria-label={fa.nav.add}
             onClick={() => setAddOpen(true)}
-            className="-mt-6 flex size-14 items-center justify-center rounded-full bg-basin text-basin-ink"
+            className="-mt-6 flex size-14 items-center justify-center rounded-full bg-basin text-basin-ink ring-4 ring-frost active:brightness-95"
           >
             <Plus className="size-7" />
           </button>
@@ -141,7 +156,7 @@ export function AppShell() {
         type="button"
         onClick={() => setAddOpen(true)}
         aria-label={fa.nav.add}
-        className="fixed bottom-8 end-8 z-30 hidden size-14 items-center justify-center rounded-full bg-basin text-basin-ink lg:flex"
+        className="fixed bottom-8 end-8 z-30 hidden size-14 items-center justify-center rounded-full bg-basin text-basin-ink ring-4 ring-frost hover:bg-basin/90 active:brightness-95 lg:flex"
       >
         <Plus className="size-6" />
       </button>

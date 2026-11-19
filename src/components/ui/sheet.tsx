@@ -22,11 +22,11 @@ export function SheetContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink/40" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-[2px]" />
       <DialogPrimitive.Content
         className={cn(
-          'safe-b fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-sheet border-t border-line bg-paper p-4 shadow-none',
-          'md:inset-x-auto md:bottom-auto md:top-1/2 md:start-1/2 md:max-h-[85dvh] md:w-[min(560px,92vw)] md:-translate-y-1/2 md:rounded-sheet md:border',
+          'fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-sheet border-t border-line bg-paper px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 shadow-none',
+          'md:inset-x-auto md:bottom-auto md:top-1/2 md:start-1/2 md:max-h-[85dvh] md:w-[min(560px,92vw)] md:-translate-y-1/2 md:rounded-sheet md:border md:p-5',
           className,
         )}
         {...props}
@@ -38,7 +38,7 @@ export function SheetContent({
           {hideClose ? null : (
             <DialogPrimitive.Close
               aria-label="بستن"
-              className="-mt-1 -me-1 flex size-12 items-center justify-center rounded-input text-crate"
+              className="-mt-1 -me-1 flex size-12 items-center justify-center rounded-input text-crate hover:bg-frost active:bg-line/40"
             >
               <X className="size-5" />
             </DialogPrimitive.Close>

@@ -186,7 +186,7 @@ export function ProductsPage() {
         </div>
       ) : null}
 
-      <p className="text-[0.9rem] text-crate">
+      <p className="px-1 text-[0.9rem] text-crate">
         {formatQty(rows.length)} {fa.products.countLabel}
       </p>
 
@@ -199,7 +199,7 @@ export function ProductsPage() {
       ) : (
         <div
           ref={scrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-input border border-line bg-paper"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-card border border-line bg-paper"
         >
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((item) => {
@@ -318,7 +318,7 @@ function Chip({ label, onClear }: { label: string; onClear: () => void }) {
     <button
       type="button"
       onClick={onClear}
-      className="flex h-9 items-center gap-1 rounded-full border border-line bg-paper px-3 text-sm text-ink"
+      className="flex h-9 items-center gap-1 rounded-full border border-line bg-paper px-3 text-[0.85rem] text-ink hover:bg-frost active:bg-line/40"
     >
       {label}
       <X className="size-4 text-crate" />
@@ -340,7 +340,7 @@ function ProductRow({
   onPrice: () => void;
 }) {
   return (
-    <div className="flex h-[68px] w-full items-center gap-2 border-b border-line ps-3 pe-1">
+    <div className="flex h-[68px] w-full items-center gap-2 border-b border-line ps-4 pe-1 hover:bg-frost/60">
       <button
         type="button"
         onClick={onOpen}
@@ -348,11 +348,11 @@ function ProductRow({
       >
         <ProductThumb productId={product.id} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-ink">
+          <p className="truncate font-medium text-ink">
             {displayProductName(product.name)}
-            {product.variant ? <span className="text-crate"> · {product.variant}</span> : null}
+            {product.variant ? <span className="font-normal text-crate"> · {product.variant}</span> : null}
           </p>
-          <p className="flex items-center gap-2 text-[0.9rem] text-crate">
+          <p className="flex items-center gap-2 text-[0.8rem] text-crate">
             {brandName ? <span className="truncate">{brandName}</span> : null}
             <span dir="ltr" className="shrink-0">
               {product.code}
@@ -361,7 +361,7 @@ function ProductRow({
         </div>
         {/* Quantity and the stock bars stack vertically so the name keeps the width. */}
         <div className="flex shrink-0 flex-col items-center gap-0.5">
-          <span className="tnum text-title font-extrabold text-ink">{formatQty(total)}</span>
+          <span className="tnum min-w-10 text-end text-title font-extrabold text-ink">{formatQty(total)}</span>
           <StockStack total={total} minStock={product.minStock} />
         </div>
       </button>
@@ -369,7 +369,7 @@ function ProductRow({
         type="button"
         onClick={onPrice}
         aria-label={`${fa.products.priceEdit} — ${displayProductName(product.name)}`}
-        className="flex size-11 shrink-0 items-center justify-center rounded-input text-basin"
+        className="flex size-11 shrink-0 items-center justify-center rounded-input text-basin hover:bg-frost active:bg-line/40"
       >
         <Banknote className="size-5" />
       </button>

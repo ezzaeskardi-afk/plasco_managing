@@ -25,11 +25,11 @@ export function MovementRow({
   const undone = Boolean(movement.undoOf);
 
   return (
-    <li className="flex min-h-16 items-center gap-3 border-b border-line px-3 last:border-b-0">
+    <li className="flex min-h-16 items-center gap-3 border-b border-line px-4 last:border-b-0">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-ink">
+        <p className="truncate font-medium text-ink">
           {MOVEMENT_LABELS[movement.type]}
-          {productName ? <span className="text-crate"> · {productName}</span> : null}
+          {productName ? <span className="font-normal text-crate"> · {productName}</span> : null}
         </p>
         <p className="truncate text-[0.8rem] text-crate">
           {formatJalali(movement.at)} · {formatTime(movement.at)}
@@ -38,7 +38,7 @@ export function MovementRow({
           {undone ? ` · ${fa.movements.undoneBy}` : ''}
         </p>
       </div>
-      <span className={`tnum shrink-0 font-extrabold ${movementTone(movement.qty)}`}>
+      <span className={`tnum min-w-12 shrink-0 text-end font-extrabold ${movementTone(movement.qty)}`}>
         {movement.qty > 0 ? '+' : movement.qty < 0 ? '−' : ''}
         {formatQty(Math.abs(movement.qty))}
       </span>
@@ -73,7 +73,7 @@ export function MovementRow({
               setBusy(false);
             }
           }}
-          className="flex size-10 items-center justify-center rounded-input text-crate disabled:opacity-50"
+          className="flex size-10 items-center justify-center rounded-input text-crate hover:bg-frost active:bg-line/40 disabled:opacity-50"
         >
           <Undo2 className="size-5" />
         </button>

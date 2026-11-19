@@ -63,7 +63,7 @@ export function ImportReview({
         )}
       </div>
 
-      <div className="mb-3 max-h-64 overflow-y-auto overscroll-contain rounded-input border border-line bg-paper">
+      <div className="mb-3 max-h-64 overflow-y-auto overscroll-contain rounded-card border border-line bg-paper">
         {prepared.slice(0, 200).map((row) => (
           <div
             key={row.rowNumber}
@@ -86,7 +86,7 @@ export function ImportReview({
       {mode === 'prices' ? (
         <p className="mb-3 text-[0.8rem] text-crate">{fa.importexport.modePricesHint}</p>
       ) : (
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-input border border-line bg-paper p-3">
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-card border border-line bg-paper p-3">
           <span className="text-ink">{fa.importexport.updateExistingStock}</span>
           <Switch
             checked={updateExistingStock}
@@ -116,7 +116,7 @@ export function ImportReview({
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className="rounded-input border border-line bg-paper p-3">
+    <div className="rounded-card border border-line bg-paper p-3">
       <p className="text-[0.8rem] text-crate">{label}</p>
       <p className={`tnum text-title font-bold ${tone}`}>{formatQty(value)}</p>
     </div>

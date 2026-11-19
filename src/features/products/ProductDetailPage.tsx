@@ -98,7 +98,7 @@ export function ProductDetailPage() {
 
   return (
     <div className="mx-auto max-w-[860px]">
-      <div className="mb-4 flex items-start gap-4 rounded-input border border-line bg-paper p-4">
+      <div className="mb-4 flex items-start gap-4 rounded-card border border-line bg-paper p-4">
         <ProductThumb productId={product.id} kind="full" className="size-24 rounded-thumb" />
         <div className="min-w-0 flex-1">
           <h2 className="text-title font-bold text-ink">{displayProductName(product.name)}</h2>
@@ -141,7 +141,7 @@ export function ProductDetailPage() {
           onClick={() => setPriceOpen(true)}
         />
         {product.minStock != null ? (
-          <div className="rounded-input border border-line bg-paper p-3">
+          <div className="rounded-card border border-line bg-paper p-3">
             <p className="text-[0.9rem] text-crate">{fa.products.minStock}</p>
             <p className="tnum font-bold text-ink">{formatQty(product.minStock)}</p>
           </div>
@@ -193,7 +193,7 @@ export function ProductDetailPage() {
         {myLevels.length === 0 ? (
           <p className="text-crate">{fa.products.noLocation}</p>
         ) : (
-          <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
+          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-paper">
             {myLevels.map((level) => {
               const key = `${level.productId}:${level.locationId}`;
               const value = binDraft?.key === key ? binDraft.value : (level.bin ?? '');
@@ -232,7 +232,7 @@ export function ProductDetailPage() {
         {!movements || movements.length === 0 ? (
           <p className="text-crate">{fa.empty.movements}</p>
         ) : (
-          <ul className="overflow-hidden rounded-input border border-line bg-paper">
+          <ul className="overflow-hidden rounded-card border border-line bg-paper">
             {movements.map((movement) => (
               <MovementRow
                 key={movement.id}
@@ -248,7 +248,7 @@ export function ProductDetailPage() {
         {!priceChanges || priceChanges.length === 0 ? (
           <p className="text-crate">{fa.common.none}</p>
         ) : (
-          <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
+          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-paper">
             {priceChanges.slice(0, 20).map((change) => {
               // A buy-price change would leak the cost the lock hides, so its
               // old/new values are masked; retail and wholesale stay readable.
@@ -297,7 +297,7 @@ function PriceCell({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-input border border-line bg-paper p-3 text-start"
+      className="rounded-card border border-line bg-paper p-3 text-start"
     >
       <p className="text-[0.9rem] text-crate">{label}</p>
       {value != null ? (

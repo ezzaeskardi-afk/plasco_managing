@@ -74,7 +74,7 @@ export function LabelsPage() {
           {data[kind].length === 0 ? (
             <EmptyState message={kind === 'brands' ? fa.empty.brands : kind === 'categories' ? fa.empty.categories : fa.empty.locations} />
           ) : (
-            <ul className="divide-y divide-line overflow-hidden rounded-input border border-line bg-paper">
+            <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-paper">
               {data[kind].map((item) => (
                 <li key={item.id} className="flex min-h-14 items-center gap-3 px-3">
                   <span className="min-w-0 flex-1 truncate text-ink">{item.name}</span>

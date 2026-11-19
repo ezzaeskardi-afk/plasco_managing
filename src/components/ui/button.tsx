@@ -8,12 +8,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-basin text-basin-ink',
-        secondary: 'border border-line bg-paper text-ink',
-        outline: 'border border-line bg-transparent text-ink',
-        ghost: 'bg-transparent text-ink',
-        destructive: 'bg-out text-white',
-        link: 'text-basin underline-offset-4',
+        default: 'bg-basin text-basin-ink hover:bg-basin/90 active:brightness-95',
+        secondary: 'border border-line bg-paper text-ink hover:bg-frost active:bg-line/40',
+        outline: 'border border-line bg-transparent text-ink hover:bg-frost active:bg-line/40',
+        ghost: 'bg-transparent text-ink hover:bg-frost active:bg-line/40',
+        destructive: 'bg-out text-out-ink hover:bg-out/90 active:brightness-95',
+        link: 'text-basin underline-offset-4 hover:underline',
       },
       size: {
         default: 'h-12 px-4 text-base',
